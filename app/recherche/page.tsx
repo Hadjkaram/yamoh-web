@@ -1,12 +1,13 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, Send } from "lucide-react";
+import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react"; // Ajout de Suspense ici
 import { supabase } from "@/lib/supabase";
 
-export default function RechercheResultats() {
+// 1. On crée le composant qui contient toute ta logique (qui était avant ton export par défaut)
+function RechercheContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const depart = searchParams.get("depart");
@@ -44,7 +45,6 @@ export default function RechercheResultats() {
     fetchTrajets();
   }, [depart, destination]);
 
-  // LOGIQUE POUR CONTACTER LE CONDUCTEUR
   const handleContact = async (conducteurId: string, trajetId: string) => {
     if (!user) {
       alert("Connectez-vous pour envoyer un message.");
@@ -58,14 +58,12 @@ export default function RechercheResultats() {
 
     setContactLoading(true);
 
-    // 1. Chercher si une conversation existe déjà pour ce trajet
     let { data: conv } = await supabase
       .from('conversations')
       .select('id')
       .match({ trajet_id: trajetId, passager_id: user.id, conducteur_id: conducteurId })
       .maybeSingle();
 
-    // 2. Sinon, on la crée
     if (!conv) {
       const { data, error } = await supabase
         .from('conversations')
@@ -81,7 +79,6 @@ export default function RechercheResultats() {
       conv = data;
     }
 
-    // 3. Redirection vers la messagerie
     router.push('/messages');
   };
 
@@ -219,7 +216,6 @@ export default function RechercheResultats() {
                </div>
             </div>
 
-            {/* BOUTON CONTACTER */}
             <button 
               onClick={() => handleContact(viewingProfile.id, viewingProfile.trajetId)}
               disabled={contactLoading}
@@ -232,5 +228,18 @@ export default function RechercheResultats() {
         </div>
       )}
     </main>
+  );
+}
+
+// 2. Voici le composant principal (export default) qui enveloppe ta logique avec <Suspense>
+export default function RechercheResultats() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 font-black text-yamo-teal text-xl">
+        Chargement de la recherche...
+      </div>
+    }>
+      <RechercheContent />
+    </Suspense>
   );
 }
