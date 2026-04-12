@@ -59,7 +59,6 @@ export default function Home() {
           animation: drive 18s linear infinite;
         }
         .city-skyline {
-          /* Génération d'une ville stylisée en SVG direct (Couleur Yamoh Teal) */
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 200'%3E%3Cpath fill='%23166C82' d='M0,200 L0,150 L50,150 L50,100 L90,100 L90,160 L140,160 L140,80 L200,80 L200,120 L250,120 L250,60 L300,60 L300,140 L350,140 L350,90 L420,90 L420,150 L480,150 L480,40 L530,40 L530,130 L600,130 L600,70 L650,70 L650,160 L700,160 L700,110 L760,110 L760,140 L820,140 L820,80 L880,80 L880,150 L950,150 L950,100 L1000,100 L1000,200 Z'/%3E%3C/svg%3E");
           background-repeat: repeat-x;
           background-size: 800px 100%;
@@ -129,17 +128,17 @@ export default function Home() {
 
         {/* VOITURE ANIMÉE QUI ROULE */}
         <div className="absolute bottom-12 left-0 animate-drive pointer-events-none z-10">
-          {/* Custom SVG Voiture aux couleurs Yamoh */}
           <svg width="100" height="40" viewBox="0 0 100 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M15 30 C 15 30, 15 15, 30 15 L 45 5 L 75 5 L 90 20 C 95 20, 95 30, 95 30 Z" fill="#166C82"/> {/* Corps Teal */}
-            <circle cx="35" cy="30" r="8" fill="#D55A1A"/> {/* Roue Orange */}
-            <circle cx="75" cy="30" r="8" fill="#D55A1A"/> {/* Roue Orange */}
-            <path d="M 47 7 L 68 7 L 82 18 L 47 18 Z" fill="#E8F4F8"/> {/* Vitre bleue ciel */}
+            <path d="M15 30 C 15 30, 15 15, 30 15 L 45 5 L 75 5 L 90 20 C 95 20, 95 30, 95 30 Z" fill="#166C82"/>
+            <circle cx="35" cy="30" r="8" fill="#D55A1A"/>
+            <circle cx="75" cy="30" r="8" fill="#D55A1A"/>
+            <path d="M 47 7 L 68 7 L 82 18 L 47 18 Z" fill="#E8F4F8"/>
           </svg>
         </div>
 
+        {/* TEXTE MODIFIÉ : Sans "à Abidjan" */}
         <h1 className="relative z-20 text-4xl md:text-5xl lg:text-7xl font-extrabold text-yamo-teal mb-12 max-w-4xl tracking-tight leading-[1.1]">
-          On fait la route ensemble à Abidjan.
+          On fait la route ensemble.
         </h1>
 
         <div className="relative z-20 bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
@@ -167,18 +166,18 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- MEILLEURS PRIX ABIDJAN (AGRANDIS) --- */}
+      {/* --- MEILLEURS PRIX : 3 BLOCS AGRANDIS --- */}
       <section className="py-24 px-6 max-w-7xl mx-auto">
         <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">Les trajets les plus demandés</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+        {/* On passe en grid-cols-3 pour que les 3 cartes prennent toute la largeur */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           {[
             { from: "Yopougon", to: "Plateau", price: "500", img: "/yop_plateau.jpg" },
             { from: "Cocody", to: "Plateau", price: "500", img: "/cocody_plateau.jpg" },
-            { from: "Yopougon", to: "Cocody", price: "800", img: "/yop_cocody.jpg" },
-            { from: "Bingerville", to: "Plateau", price: "1.000", img: "/binge_plateau.jpg" }
+            { from: "Yopougon", to: "Cocody", price: "800", img: "/yop_cocody.jpg" }
           ].map((item, index) => (
-            <div key={index} className="bg-white rounded-[2.5rem] overflow-hidden shadow-lg border border-gray-100 hover:shadow-2xl transition duration-500 group">
-              <div className="h-64 bg-gray-200 relative overflow-hidden">
+            <div key={index} className="bg-white rounded-[2.5rem] overflow-hidden shadow-lg border border-gray-100 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group">
+              <div className="h-72 bg-gray-200 relative overflow-hidden">
                 <img 
                   src={item.img} 
                   className="h-full w-full object-cover group-hover:scale-110 transition duration-700" 
@@ -193,7 +192,7 @@ export default function Home() {
                     <div className="w-[2px] h-6 bg-gray-200"></div>
                     <div className="w-3 h-3 rounded-full border-2 border-yamo-orange"></div>
                   </div>
-                  <div className="font-black text-xl text-gray-800">
+                  <div className="font-black text-2xl text-gray-800">
                     <p>{item.from}</p>
                     <p>{item.to}</p>
                   </div>
@@ -203,7 +202,7 @@ export default function Home() {
                     <p className="text-xs text-gray-400 font-black uppercase tracking-widest">À partir de</p>
                     <p className="text-3xl font-black text-yamo-teal">{item.price} <span className="text-lg">FCFA</span></p>
                   </div>
-                  <button className="bg-yamo-teal text-white p-4 rounded-full group-hover:bg-yamo-orange transition-all shadow-lg shadow-yamo-teal/20 group-hover:shadow-yamo-orange/20"><ArrowRight size={24}/></button>
+                  <button className="bg-yamo-teal text-white p-4 rounded-full group-hover:bg-yamo-orange transition-all shadow-lg shadow-yamo-teal/20 group-hover:shadow-yamo-orange/20 group-hover:translate-x-1"><ArrowRight size={24}/></button>
                 </div>
               </div>
             </div>
@@ -215,18 +214,18 @@ export default function Home() {
       <section className="py-24 bg-gray-50 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-16 mb-24">
-            <div className="flex flex-col items-start gap-6">
-              <div className="p-5 bg-white rounded-3xl shadow-sm"><ShieldCheck size={48} className="text-yamo-teal" /></div>
+            <div className="flex flex-col items-start gap-6 group hover:-translate-y-1 transition-transform duration-300">
+              <div className="p-5 bg-white rounded-3xl shadow-sm group-hover:shadow-md transition-shadow"><ShieldCheck size={48} className="text-yamo-teal group-hover:scale-110 transition-transform" /></div>
               <h3 className="text-2xl font-black text-gray-900">Zéro "On dit", que du vrai</h3>
               <p className="text-gray-600 text-lg leading-relaxed font-medium">On check les profils, les avis et les CNI. Tu sais avec qui tu montes en voiture.</p>
             </div>
-            <div className="flex flex-col items-start gap-6">
-              <div className="p-5 bg-white rounded-3xl shadow-sm"><SmartphoneNfc size={48} className="text-yamo-teal" /></div>
+            <div className="flex flex-col items-start gap-6 group hover:-translate-y-1 transition-transform duration-300">
+              <div className="p-5 bg-white rounded-3xl shadow-sm group-hover:shadow-md transition-shadow"><SmartphoneNfc size={48} className="text-yamo-teal group-hover:scale-110 transition-transform" /></div>
               <h3 className="text-2xl font-black text-gray-900">Payez par Mobile Money</h3>
               <p className="text-gray-600 text-lg leading-relaxed font-medium">Wave, Orange Money ou MTN... Réglez sans palabres avant même d'arriver.</p>
             </div>
-            <div className="flex flex-col items-start gap-6">
-              <div className="p-5 bg-white rounded-3xl shadow-sm"><PiggyBank size={48} className="text-yamo-teal" /></div>
+            <div className="flex flex-col items-start gap-6 group hover:-translate-y-1 transition-transform duration-300">
+              <div className="p-5 bg-white rounded-3xl shadow-sm group-hover:shadow-md transition-shadow"><PiggyBank size={48} className="text-yamo-teal group-hover:scale-110 transition-transform" /></div>
               <h3 className="text-2xl font-black text-gray-900">Économisez gros</h3>
               <p className="text-gray-600 text-lg leading-relaxed font-medium">Partagez l'essence avec les autres. C'est cadeau pour ton portefeuille !</p>
             </div>
@@ -234,21 +233,21 @@ export default function Home() {
 
           <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">On bouge comment aujourd'hui ?</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal transition-all duration-300 cursor-pointer group">
+            <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer group">
               <div className="bg-[#E8F4F8] p-6 rounded-[2rem] text-yamo-teal group-hover:bg-yamo-teal group-hover:text-white transition-all"><Car size={40}/></div>
               <div className="flex-1">
                 <h4 className="text-2xl font-black">Covoiturage</h4>
                 <p className="text-gray-500 font-medium italic text-lg">Le transport est cher ? Partagez les frais !</p>
               </div>
-              <ArrowRight className="text-gray-300 group-hover:text-yamo-teal transition" size={32} />
+              <ArrowRight className="text-gray-300 group-hover:text-yamo-teal group-hover:translate-x-2 transition-all" size={32} />
             </div>
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal transition-all duration-300 cursor-pointer group">
+            <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer group">
               <div className="bg-[#FFF0E8] p-6 rounded-[2rem] text-yamo-orange group-hover:bg-yamo-orange group-hover:text-white transition-all"><Car size={40}/></div>
               <div className="flex-1">
                 <h4 className="text-2xl font-black">VTC & Pro</h4>
                 <p className="text-gray-500 font-medium italic text-lg">Pour un trajet calme, VIP et climatisé.</p>
               </div>
-              <ArrowRight className="text-gray-300 group-hover:text-yamo-orange transition" size={32} />
+              <ArrowRight className="text-gray-300 group-hover:text-yamo-orange group-hover:translate-x-2 transition-all" size={32} />
             </div>
           </div>
         </div>
@@ -264,21 +263,21 @@ export default function Home() {
           <div>
             <h5 className="font-black text-xl mb-8 tracking-tight">Yamoh</h5>
             <ul className="space-y-5 text-gray-400 font-bold text-lg">
-              <li><Link href="#" className="hover:text-yamo-orange transition">Qui sommes-nous ?</Link></li>
-              <li><Link href="/publier" className="hover:text-yamo-orange transition">Proposer un trajet</Link></li>
+              <li><Link href="#" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">Qui sommes-nous ?</Link></li>
+              <li><Link href="/publier" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">Proposer un trajet</Link></li>
             </ul>
           </div>
           <div>
             <h5 className="font-black text-xl mb-8 tracking-tight">Légal</h5>
             <ul className="space-y-5 text-gray-400 font-bold text-lg">
-              <li><Link href="#" className="hover:text-yamo-orange transition">CGV</Link></li>
-              <li><Link href="#" className="hover:text-yamo-orange transition">Confidentialité</Link></li>
+              <li><Link href="#" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">CGV</Link></li>
+              <li><Link href="#" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">Confidentialité</Link></li>
             </ul>
           </div>
           <div>
             <h5 className="font-black text-xl mb-8 tracking-tight">Suivez-nous</h5>
             <div className="flex gap-5">
-              <div className="bg-white/10 p-4 rounded-full hover:bg-yamo-orange transition cursor-pointer shadow-lg"><Share2 size={24}/></div>
+              <div className="bg-white/10 p-4 rounded-full hover:bg-yamo-orange hover:scale-110 transition-all cursor-pointer shadow-lg"><Share2 size={24}/></div>
             </div>
           </div>
         </div>
