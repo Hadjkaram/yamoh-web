@@ -9,8 +9,6 @@ import { supabase } from "@/lib/supabase";
 function RechercheContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
-  // On récupère les paramètres de l'URL
   const depart = searchParams.get("depart");
   const destination = searchParams.get("destination");
 
@@ -27,40 +25,50 @@ function RechercheContent() {
     });
 
     async function fetchTrajets() {
+      if (!depart || !destination) return;
       setLoading(true);
       
-      // 1. On nettoie les mots (enlève les espaces inutiles au début et à la fin)
-      const cleanDepart = depart ? depart.trim() : "";
-      const cleanDest = destination ? destination.trim() : "";
-
-      // 2. On prépare la requête de base
+      // 1. On initialise la requête de base (il faut qu'il y ait des places !)
       let query = supabase
         .from('trajets')
         .select(`
           *,
           profiles (*)
         `)
-        .gt('places_disponibles', 0); // Il faut qu'il reste de la place
+        .gt('places_disponibles', 0);
 
-      // 3. On ajoute les filtres SEULEMENT si l'utilisateur a tapé quelque chose
-      if (cleanDepart) {
-        query = query.ilike('depart', `%${cleanDepart}%`);
-      }
-      if (cleanDest) {
-        query = query.ilike('destination', `%${cleanDest}%`);
-      }
+      // 2. Fonction intelligente pour découper la recherche en mots clés purs
+      const getMotsCles = (texte: string) => {
+        return texte
+          .replace(/[,;.]/g, ' ') // Enlève la ponctuation
+          .trim()
+          .split(/\s+/) // Sépare par les espaces
+          .filter(mot => mot.length > 2 || texte.trim().length <= 2); // Ignore les petits mots comme "le", "de", etc.
+      };
 
-      // 4. On lance la recherche
+      const motsDepart = getMotsCles(depart);
+      const motsDest = getMotsCles(destination);
+
+      // 3. On applique le filtre pour CHAQUE mot tapé par le client
+      // Si la DB a "Riviera ciad" et que le client tape "Riviera", ça matche !
+      motsDepart.forEach(mot => {
+        query = query.ilike('depart', `%${mot}%`);
+      });
+
+      motsDest.forEach(mot => {
+        query = query.ilike('destination', `%${mot}%`);
+      });
+
+      // 4. Exécution de la recherche
       const { data, error } = await query;
 
       if (error) {
-        console.error("Erreur de recherche Supabase :", error.message);
+        console.error("Erreur Supabase :", error.message);
       }
 
       setTrajets(data || []);
       setLoading(false);
     }
-    
     fetchTrajets();
   }, [depart, destination]);
 
@@ -154,7 +162,7 @@ function RechercheContent() {
 
       <div className="p-4 md:p-8 max-w-3xl mx-auto w-full">
         {loading ? (
-          <div className="text-center py-10 text-gray-500 font-bold">Recherche des conducteurs...</div>
+          <div className="text-center py-10 text-gray-500 font-bold animate-pulse">Recherche des conducteurs...</div>
         ) : trajets.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-[2.5rem] shadow-sm border border-gray-100 px-6">
             <div className="bg-gray-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
