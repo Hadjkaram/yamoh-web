@@ -49,6 +49,24 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-white flex flex-col font-sans">
       
+      {/* ANIMATIONS CSS GLOBALES POUR L'ACCUEIL */}
+      <style>{`
+        @keyframes drive {
+          0% { transform: translateX(-150px); }
+          100% { transform: translateX(100vw); }
+        }
+        .animate-drive {
+          animation: drive 18s linear infinite;
+        }
+        .city-skyline {
+          /* Génération d'une ville stylisée en SVG direct (Couleur Yamoh Teal) */
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 200'%3E%3Cpath fill='%23166C82' d='M0,200 L0,150 L50,150 L50,100 L90,100 L90,160 L140,160 L140,80 L200,80 L200,120 L250,120 L250,60 L300,60 L300,140 L350,140 L350,90 L420,90 L420,150 L480,150 L480,40 L530,40 L530,130 L600,130 L600,70 L650,70 L650,160 L700,160 L700,110 L760,110 L760,140 L820,140 L820,80 L880,80 L880,150 L950,150 L950,100 L1000,100 L1000,200 Z'/%3E%3C/svg%3E");
+          background-repeat: repeat-x;
+          background-size: 800px 100%;
+          background-position: bottom;
+        }
+      `}</style>
+
       {/* --- HEADER --- */}
       <header className="flex items-center justify-between px-6 py-4 bg-white sticky top-0 z-50 shadow-sm border-b border-gray-100">
         <Link href="/" className="flex items-center gap-2">
@@ -80,7 +98,6 @@ export default function Home() {
                 </button>
                 {showUserMenu && (
                   <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden py-2 animate-in fade-in zoom-in duration-150">
-                    {/* OPTION PUBLIER DANS LE MENU (VISIBLE SUR MOBILE) */}
                     <Link href="/publier" className="px-6 py-3 hover:bg-gray-50 flex md:hidden items-center gap-3 text-yamo-teal font-black transition border-b border-gray-50" onClick={() => setShowUserMenu(false)}>
                       <PlusCircle size={18} /> Publier un trajet
                     </Link>
@@ -104,13 +121,28 @@ export default function Home() {
         </div>
       </header>
 
-      {/* --- HERO SECTION --- */}
-      <section className="flex flex-col items-center justify-center pt-16 pb-24 bg-[#E8F4F8] px-4 text-center">
-        <h1 className="text-4xl md:text-5xl lg:text-7xl font-extrabold text-yamo-teal mb-12 max-w-4xl tracking-tight leading-[1.1]">
-          On fait la route ensemble.
+      {/* --- HERO SECTION AVEC ANIMATION VILLE ET VOITURE --- */}
+      <section className="relative flex flex-col items-center justify-center pt-16 pb-32 bg-[#E8F4F8] px-4 text-center overflow-hidden">
+        
+        {/* FOND DE VILLE EN OMBRE YAMOH */}
+        <div className="absolute bottom-0 left-0 w-full h-48 city-skyline opacity-10 pointer-events-none"></div>
+
+        {/* VOITURE ANIMÉE QUI ROULE */}
+        <div className="absolute bottom-12 left-0 animate-drive pointer-events-none z-10">
+          {/* Custom SVG Voiture aux couleurs Yamoh */}
+          <svg width="100" height="40" viewBox="0 0 100 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 30 C 15 30, 15 15, 30 15 L 45 5 L 75 5 L 90 20 C 95 20, 95 30, 95 30 Z" fill="#166C82"/> {/* Corps Teal */}
+            <circle cx="35" cy="30" r="8" fill="#D55A1A"/> {/* Roue Orange */}
+            <circle cx="75" cy="30" r="8" fill="#D55A1A"/> {/* Roue Orange */}
+            <path d="M 47 7 L 68 7 L 82 18 L 47 18 Z" fill="#E8F4F8"/> {/* Vitre bleue ciel */}
+          </svg>
+        </div>
+
+        <h1 className="relative z-20 text-4xl md:text-5xl lg:text-7xl font-extrabold text-yamo-teal mb-12 max-w-4xl tracking-tight leading-[1.1]">
+          On fait la route ensemble à Abidjan.
         </h1>
 
-        <div className="bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
+        <div className="relative z-20 bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
           <div className="flex items-center flex-1 px-6 py-5 w-full border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 rounded-t-2xl md:rounded-l-full transition group">
             <div className="w-5 h-5 rounded-full border-[3px] border-gray-300 mr-4 group-focus-within:border-yamo-teal transition"></div>
             <input type="text" placeholder="Départ (ex: Angré)" className="outline-none w-full text-lg text-gray-800 placeholder-gray-400 font-bold bg-transparent" value={depart} onChange={(e) => setDepart(e.target.value)} />
