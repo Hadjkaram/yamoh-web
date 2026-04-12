@@ -80,12 +80,16 @@ export default function Home() {
                 </button>
                 {showUserMenu && (
                   <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden py-2 animate-in fade-in zoom-in duration-150">
+                    {/* OPTION PUBLIER DANS LE MENU (VISIBLE SUR MOBILE) */}
+                    <Link href="/publier" className="px-6 py-3 hover:bg-gray-50 flex md:hidden items-center gap-3 text-yamo-teal font-black transition border-b border-gray-50" onClick={() => setShowUserMenu(false)}>
+                      <PlusCircle size={18} /> Publier un trajet
+                    </Link>
                     <Link href="/dashboard" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><Car size={18} /> Vos trajets</Link>
                     <Link href="/mes-trajets" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><Ticket size={18} /> Mes billets</Link>
                     <Link href="/messages" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><MessageSquare size={18} /> Messages</Link>
                     <Link href="/profil" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition border-b border-gray-50" onClick={() => setShowUserMenu(false)}><User size={18} /> Profil</Link>
                     <Link href="/paiements" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><CreditCard size={18} /> Paiements</Link>
-                    <button onClick={handleLogout} className="px-6 py-3 hover:bg-red-50 flex items-center gap-3 text-red-600 font-bold w-full text-left transition"><LogOut size={18} /> Déconnexion</button>
+                    <button onClick={handleLogout} className="px-6 py-3 hover:bg-red-50 flex items-center gap-3 text-red-600 font-bold w-full text-left transition border-t border-gray-50"><LogOut size={18} /> Déconnexion</button>
                   </div>
                 )}
               </div>

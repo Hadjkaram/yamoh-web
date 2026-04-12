@@ -1,12 +1,11 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X } from "lucide-react";
+import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX } from "lucide-react"; // Ajout de SearchX
 import Link from "next/link";
-import { useEffect, useState, Suspense } from "react"; // Ajout de Suspense ici
+import { useEffect, useState, Suspense } from "react"; 
 import { supabase } from "@/lib/supabase";
 
-// 1. On crée le composant qui contient toute ta logique (qui était avant ton export par défaut)
 function RechercheContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -136,6 +135,22 @@ function RechercheContent() {
       <div className="p-4 md:p-8 max-w-3xl mx-auto w-full">
         {loading ? (
           <div className="text-center py-10 text-gray-500 font-bold">Recherche des conducteurs...</div>
+        ) : trajets.length === 0 ? (
+          /* NOUVEAU : MESSAGE SI AUCUN TRAJET N'EST TROUVÉ */
+          <div className="text-center py-20 bg-white rounded-[2.5rem] shadow-sm border border-gray-100 px-6">
+            <div className="bg-gray-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
+              <SearchX size={40} className="text-gray-300" />
+            </div>
+            <h3 className="text-2xl font-black text-gray-900 mb-3">Yako ! Aucun trajet trouvé</h3>
+            <p className="text-gray-500 font-medium mb-8 max-w-sm mx-auto">
+              Il n'y a pas encore de véhicule prévu pour ce trajet aujourd'hui. Mais ça ne saurait tarder !
+            </p>
+            <Link href="/publier">
+              <button className="bg-yamo-teal text-white font-black px-8 py-4 rounded-full hover:bg-yamo-orange transition shadow-xl shadow-yamo-teal/20">
+                Publier ce trajet en tant que chauffeur
+              </button>
+            </Link>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {trajets.map((trajet) => (
@@ -187,6 +202,7 @@ function RechercheContent() {
         )}
       </div>
 
+      {/* POPUP PROFIL */}
       {viewingProfile && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
@@ -231,7 +247,6 @@ function RechercheContent() {
   );
 }
 
-// 2. Voici le composant principal (export default) qui enveloppe ta logique avec <Suspense>
 export default function RechercheResultats() {
   return (
     <Suspense fallback={
