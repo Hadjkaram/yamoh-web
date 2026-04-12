@@ -1,16 +1,133 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Search, Calendar, User, PlusCircle, ShieldCheck, 
   SmartphoneNfc, PiggyBank, LogOut, ChevronDown, 
   Car, MessageSquare, CreditCard, Ticket, ArrowRight,
-  Share2 
+  Share2, MapPin, History // Nouvelles icônes pour les suggestions
 } from "lucide-react";
 import { supabase } from "@/lib/supabase"; 
 import NotificationBell from "@/components/NotificationBell";
+
+// --- COMPOSANT INTELLIGENT D'AUTO-COMPLÉTION (NOUVEAU) ---
+function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderClass }: any) {
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Charger l'historique au démarrage
+  useEffect(() => {
+    const savedHistory = JSON.parse(localStorage.getItem('yamoh_search_history') || '[]');
+    setHistory(savedHistory);
+  }, []);
+
+  // Fermer le menu si on clique en dehors
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Chercher les adresses en direct via OpenStreetMap (Gratuit)
+  const fetchSuggestions = async (query: string) => {
+    onChange(query);
+    if (query.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      // On restreint la recherche à Abidjan, Côte d'Ivoire
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}, Abidjan, Côte d'Ivoire&limit=5`);
+      const data = await res.json();
+      setSuggestions(data);
+    } catch (error) {
+      console.error("Erreur de recherche d'adresse", error);
+    }
+    setLoading(false);
+  };
+
+  const handleSelect = (adresse: string) => {
+    onChange(adresse);
+    setShowDropdown(false);
+    
+    // Sauvegarder dans l'historique (max 5)
+    const newHistory = [adresse, ...history.filter(h => h !== adresse)].slice(0, 5);
+    setHistory(newHistory);
+    localStorage.setItem('yamoh_search_history', JSON.stringify(newHistory));
+  };
+
+  return (
+    <div className={`flex items-center flex-1 px-6 py-5 w-full relative transition group ${borderClass}`} ref={wrapperRef}>
+      <div className={`w-5 h-5 rounded-full border-[3px] mr-4 transition ${dotColor}`}></div>
+      <input 
+        type="text" 
+        placeholder={placeholder} 
+        className="outline-none w-full text-lg text-gray-800 placeholder-gray-400 font-bold bg-transparent" 
+        value={value} 
+        onChange={(e) => {
+          fetchSuggestions(e.target.value);
+          setShowDropdown(true);
+        }}
+        onFocus={() => setShowDropdown(true)}
+      />
+
+      {/* MENU DÉROULANT DES SUGGESTIONS */}
+      {showDropdown && (value.length > 0 || history.length > 0) && (
+        <div className="absolute top-[100%] left-0 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+          
+          {/* Historique si le champ est vide */}
+          {value.length === 0 && history.length > 0 && (
+            <div className="p-2">
+              <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Recherches récentes</p>
+              {history.map((histItem, idx) => (
+                <div key={idx} onClick={() => handleSelect(histItem)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer rounded-xl transition">
+                  <History size={18} className="text-gray-400" />
+                  <span className="font-medium text-gray-700">{histItem}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Résultats de recherche en direct */}
+          {value.length >= 2 && (
+            <div className="p-2">
+              <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Lieux trouvés</p>
+              {loading ? (
+                <div className="px-4 py-3 text-gray-500 font-medium text-sm italic">Recherche en cours...</div>
+              ) : suggestions.length > 0 ? (
+                suggestions.map((item, idx) => (
+                  <div key={idx} onClick={() => handleSelect(item.display_name.split(',')[0])} className="flex items-start gap-3 px-4 py-3 hover:bg-[#E8F4F8] cursor-pointer rounded-xl transition group/item">
+                    <MapPin size={20} className="text-yamo-teal mt-0.5 opacity-50 group-hover/item:opacity-100 transition" />
+                    <div>
+                      {/* On affiche le nom principal */}
+                      <p className="font-bold text-gray-900">{item.display_name.split(',')[0]}</p>
+                      {/* On affiche le reste de l'adresse en petit */}
+                      <p className="text-xs text-gray-500 line-clamp-1">{item.display_name.split(',').slice(1).join(',')}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="px-4 py-3 text-gray-500 font-medium text-sm italic">Aucun lieu trouvé pour "{value}"</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+// --- FIN DU COMPOSANT ---
+
 
 export default function Home() {
   const router = useRouter();
@@ -120,13 +237,11 @@ export default function Home() {
         </div>
       </header>
 
-      {/* --- HERO SECTION AVEC ANIMATION VILLE ET VOITURE --- */}
+      {/* --- HERO SECTION --- */}
       <section className="relative flex flex-col items-center justify-center pt-16 pb-32 bg-[#E8F4F8] px-4 text-center overflow-hidden">
         
-        {/* FOND DE VILLE EN OMBRE YAMOH */}
         <div className="absolute bottom-0 left-0 w-full h-48 city-skyline opacity-10 pointer-events-none"></div>
 
-        {/* VOITURE ANIMÉE QUI ROULE */}
         <div className="absolute bottom-12 left-0 animate-drive pointer-events-none z-10">
           <svg width="100" height="40" viewBox="0 0 100 40" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M15 30 C 15 30, 15 15, 30 15 L 45 5 L 75 5 L 90 20 C 95 20, 95 30, 95 30 Z" fill="#166C82"/>
@@ -136,20 +251,30 @@ export default function Home() {
           </svg>
         </div>
 
-        {/* TEXTE MODIFIÉ : Sans "à Abidjan" */}
         <h1 className="relative z-20 text-4xl md:text-5xl lg:text-7xl font-extrabold text-yamo-teal mb-12 max-w-4xl tracking-tight leading-[1.1]">
           On fait la route ensemble.
         </h1>
 
-        <div className="relative z-20 bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
-          <div className="flex items-center flex-1 px-6 py-5 w-full border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 rounded-t-2xl md:rounded-l-full transition group">
-            <div className="w-5 h-5 rounded-full border-[3px] border-gray-300 mr-4 group-focus-within:border-yamo-teal transition"></div>
-            <input type="text" placeholder="Départ (ex: Angré)" className="outline-none w-full text-lg text-gray-800 placeholder-gray-400 font-bold bg-transparent" value={depart} onChange={(e) => setDepart(e.target.value)} />
-          </div>
-          <div className="flex items-center flex-1 px-6 py-5 w-full border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 transition group">
-            <div className="w-5 h-5 rounded-full border-[3px] border-yamo-orange mr-4"></div>
-            <input type="text" placeholder="Destination (ex: Plateau)" className="outline-none w-full text-lg text-gray-800 placeholder-gray-400 font-bold bg-transparent" value={destination} onChange={(e) => setDestination(e.target.value)} />
-          </div>
+        <div className="relative z-30 bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
+          
+          {/* CHAMP DÉPART AVEC AUTO-COMPLÉTION */}
+          <LocationAutocomplete 
+            placeholder="Départ (ex: Angré)" 
+            value={depart} 
+            onChange={setDepart} 
+            dotColor="border-gray-300 group-focus-within:border-yamo-teal"
+            borderClass="border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 rounded-t-2xl md:rounded-l-full"
+          />
+
+          {/* CHAMP DESTINATION AVEC AUTO-COMPLÉTION */}
+          <LocationAutocomplete 
+            placeholder="Destination (ex: Plateau)" 
+            value={destination} 
+            onChange={setDestination} 
+            dotColor="border-yamo-orange"
+            borderClass="border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50"
+          />
+
           <div className="flex items-center px-6 py-5 w-full md:w-auto border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 transition">
             <Calendar size={24} className="text-gray-400 mr-3" />
             <input type="date" className="outline-none text-lg text-gray-800 font-bold bg-transparent cursor-pointer" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -166,10 +291,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- MEILLEURS PRIX : 3 BLOCS AGRANDIS --- */}
+      {/* --- MEILLEURS PRIX --- */}
       <section className="py-24 px-6 max-w-7xl mx-auto">
         <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">Les trajets les plus demandés</h2>
-        {/* On passe en grid-cols-3 pour que les 3 cartes prennent toute la largeur */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           {[
             { from: "Yopougon", to: "Plateau", price: "500", img: "/yop_plateau.jpg" },

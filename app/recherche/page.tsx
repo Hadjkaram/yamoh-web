@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX } from "lucide-react"; // Ajout de SearchX
+import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, Suspense } from "react"; 
 import { supabase } from "@/lib/supabase";
@@ -9,6 +9,8 @@ import { supabase } from "@/lib/supabase";
 function RechercheContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  
+  // On récupère les paramètres de l'URL
   const depart = searchParams.get("depart");
   const destination = searchParams.get("destination");
 
@@ -25,22 +27,40 @@ function RechercheContent() {
     });
 
     async function fetchTrajets() {
-      if (!depart || !destination) return;
       setLoading(true);
       
-      const { data, error } = await supabase
+      // 1. On nettoie les mots (enlève les espaces inutiles au début et à la fin)
+      const cleanDepart = depart ? depart.trim() : "";
+      const cleanDest = destination ? destination.trim() : "";
+
+      // 2. On prépare la requête de base
+      let query = supabase
         .from('trajets')
         .select(`
           *,
           profiles (*)
         `)
-        .ilike('depart', `%${depart}%`)
-        .ilike('destination', `%${destination}%`)
-        .gt('places_disponibles', 0);
+        .gt('places_disponibles', 0); // Il faut qu'il reste de la place
 
-      if (!error) setTrajets(data || []);
+      // 3. On ajoute les filtres SEULEMENT si l'utilisateur a tapé quelque chose
+      if (cleanDepart) {
+        query = query.ilike('depart', `%${cleanDepart}%`);
+      }
+      if (cleanDest) {
+        query = query.ilike('destination', `%${cleanDest}%`);
+      }
+
+      // 4. On lance la recherche
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Erreur de recherche Supabase :", error.message);
+      }
+
+      setTrajets(data || []);
       setLoading(false);
     }
+    
     fetchTrajets();
   }, [depart, destination]);
 
@@ -128,7 +148,7 @@ function RechercheContent() {
           <ArrowLeft size={24} className="text-gray-600 hover:text-black transition" />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">{depart} → {destination}</h1>
+          <h1 className="text-xl font-bold text-gray-900">{depart || "Départ"} → {destination || "Destination"}</h1>
         </div>
       </header>
 
@@ -136,7 +156,6 @@ function RechercheContent() {
         {loading ? (
           <div className="text-center py-10 text-gray-500 font-bold">Recherche des conducteurs...</div>
         ) : trajets.length === 0 ? (
-          /* NOUVEAU : MESSAGE SI AUCUN TRAJET N'EST TROUVÉ */
           <div className="text-center py-20 bg-white rounded-[2.5rem] shadow-sm border border-gray-100 px-6">
             <div className="bg-gray-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
               <SearchX size={40} className="text-gray-300" />
@@ -202,7 +221,6 @@ function RechercheContent() {
         )}
       </div>
 
-      {/* POPUP PROFIL */}
       {viewingProfile && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
