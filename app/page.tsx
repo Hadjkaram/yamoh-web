@@ -107,7 +107,7 @@ export default function Home() {
       {/* --- HERO SECTION --- */}
       <section className="flex flex-col items-center justify-center pt-16 pb-24 bg-[#E8F4F8] px-4 text-center">
         <h1 className="text-4xl md:text-5xl lg:text-7xl font-extrabold text-yamo-teal mb-12 max-w-4xl tracking-tight leading-[1.1]">
-          On fait la route ensemble à Abidjan.
+          On fait la route ensemble.
         </h1>
 
         <div className="bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
