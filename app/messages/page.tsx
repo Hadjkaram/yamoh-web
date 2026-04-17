@@ -19,8 +19,8 @@ export default function MessagesPage() {
       if (!session) return;
       setUserId(session.user.id);
 
-      // Charger les conversations où l'utilisateur est soit passager, soit conducteur
-      const { data } = await supabase
+      // Charger les conversations
+      const { data, error } = await supabase
         .from('conversations')
         .select(`
           *,
@@ -31,7 +31,15 @@ export default function MessagesPage() {
         .or(`passager_id.eq.${session.user.id},conducteur_id.eq.${session.user.id}`)
         .order('created_at', { ascending: false });
       
-      if (data) setConversations(data);
+      if (error) {
+        console.error("Erreur de chargement des conversations :", error.message);
+      }
+
+      if (data && data.length > 0) {
+        setConversations(data);
+        // L'ASTUCE UX : On ouvre automatiquement la discussion la plus récente !
+        setSelectedConv(data[0]); 
+      }
     }
     init();
   }, []);
@@ -84,7 +92,7 @@ export default function MessagesPage() {
     }]);
 
     if (error) {
-      alert("Erreur d'envoi");
+      alert("Erreur d'envoi : " + error.message);
       setNewMessage(messageToSend);
     }
   };
@@ -110,7 +118,7 @@ export default function MessagesPage() {
                 className={`p-6 border-b border-gray-50 cursor-pointer transition ${selectedConv?.id === conv.id ? 'bg-yamo-teal/5 border-l-4 border-l-yamo-teal' : 'hover:bg-gray-50'}`}
               >
                 <div className="flex justify-between items-center mb-1">
-                  <p className="font-black text-gray-900">{conv.trajets?.depart} → {conv.trajets?.destination}</p>
+                  <p className="font-black text-gray-900">{conv.trajets?.depart?.split(',')[0]} → {conv.trajets?.destination?.split(',')[0]}</p>
                 </div>
                 <p className="text-sm text-gray-500 truncate">
                   {userId === conv.conducteur_id ? `Passager : ${conv.passager?.full_name}` : `Conducteur : ${conv.conducteur?.full_name}`}
@@ -127,48 +135,55 @@ export default function MessagesPage() {
           <>
             <header className="p-4 bg-white border-b border-gray-100 flex items-center gap-4 shadow-sm z-10">
               <button onClick={() => setSelectedConv(null)} className="md:hidden p-2"><ArrowLeft /></button>
-              <div className="w-10 h-10 bg-yamo-teal/10 rounded-full flex items-center justify-center text-yamo-teal">
-                <UserIcon size={20} />
+              <div className="w-10 h-10 bg-yamo-teal/10 rounded-full flex items-center justify-center text-yamo-teal font-black text-lg">
+                {(userId === selectedConv.conducteur_id ? selectedConv.passager?.full_name : selectedConv.conducteur?.full_name)?.charAt(0).toUpperCase() || <UserIcon size={20} />}
               </div>
               <div>
                 <p className="font-black text-gray-900 leading-none">
                   {userId === selectedConv.conducteur_id ? selectedConv.passager?.full_name : selectedConv.conducteur?.full_name}
                 </p>
-                <p className="text-xs text-yamo-teal font-bold mt-1">En ligne</p>
+                <p className="text-xs text-yamo-teal font-bold mt-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-yamo-teal animate-pulse"></span> En ligne
+                </p>
               </div>
             </header>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.sender_id === userId ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-4 rounded-[1.5rem] font-medium text-sm md:text-base shadow-sm ${
-                    m.sender_id === userId 
-                    ? 'bg-yamo-teal text-white rounded-tr-none' 
-                    : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'
-                  }`}>
-                    {m.content}
+              {messages.length === 0 ? (
+                <div className="text-center text-gray-400 mt-10 font-medium">Envoyez le premier message !</div>
+              ) : (
+                messages.map((m, i) => (
+                  <div key={i} className={`flex ${m.sender_id === userId ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] p-4 rounded-[1.5rem] font-medium text-sm md:text-base shadow-sm ${
+                      m.sender_id === userId 
+                      ? 'bg-yamo-teal text-white rounded-tr-none' 
+                      : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'
+                    }`}>
+                      {m.content}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
               <div ref={scrollRef} />
             </div>
 
-            <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-100 flex gap-2 items-center">
+            {/* LA FAMEUSE ZONE DE TEXTE EST ICI */}
+            <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-100 flex gap-2 items-center shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
               <input 
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Écrivez à votre co-voyageur..."
+                placeholder="Écrivez votre message ici..."
                 className="flex-1 bg-gray-50 p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-yamo-teal/20 transition font-medium"
               />
-              <button type="submit" className="bg-yamo-teal text-white p-4 rounded-2xl hover:bg-[#115566] transition shadow-lg shadow-yamo-teal/20">
+              <button type="submit" disabled={!newMessage.trim()} className="bg-yamo-teal text-white p-4 rounded-2xl hover:bg-[#115566] transition shadow-lg shadow-yamo-teal/20 disabled:opacity-50 disabled:cursor-not-allowed">
                 <Send size={20} />
               </button>
             </form>
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-300">
-            <div className="p-8 bg-white rounded-full mb-6 shadow-sm">
-              <MessageSquare size={64} className="opacity-20" />
+            <div className="p-8 bg-white rounded-full mb-6 shadow-sm border border-gray-50">
+              <MessageSquare size={64} className="text-yamo-teal opacity-20" />
             </div>
             <p className="text-xl font-black text-gray-400">Vos discussions apparaîtront ici</p>
           </div>
