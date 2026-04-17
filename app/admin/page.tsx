@@ -123,19 +123,17 @@ export default function ERPAdmin() {
     setLoadingUsers(false);
   };
 
-  // --- NOUVELLE FONCTION : SUPPRIMER UN UTILISATEUR ---
   const handleDeleteUser = async (userId: string, userName: string) => {
-    const confirm = window.confirm(`⚠️ ATTENTION : Voulez-vous vraiment bannir et supprimer les données de ${userName} ? Cette action est irréversible.`);
+    const confirm = window.confirm(`⚠️ ATTENTION : Voulez-vous vraiment bannir et supprimer les données de ${userName || "cet utilisateur"} ? Cette action est irréversible.`);
     if (!confirm) return;
 
-    // Suppression du profil (si la BDD a le "Cascade Delete" activé, ça supprimera aussi ses trajets/réservations)
     const { error } = await supabase.from('profiles').delete().eq('id', userId);
 
     if (error) {
       alert("Erreur lors de la suppression : " + error.message);
     } else {
-      alert(`${userName} a été supprimé de la plateforme avec succès.`);
-      fetchAllUsers(); // On met à jour la liste
+      alert(`${userName || "L'utilisateur"} a été supprimé de la plateforme avec succès.`);
+      fetchAllUsers(); 
     }
   };
 
@@ -221,8 +219,22 @@ export default function ERPAdmin() {
     );
   }
 
-  const filteredUsers = allUsers.filter(u => u.full_name?.toLowerCase().includes(globalSearch.toLowerCase()) || u.phone?.includes(globalSearch));
-  const filteredChauffeurs = chauffeurs.filter(c => c.full_name?.toLowerCase().includes(globalSearch.toLowerCase()) || c.phone?.includes(globalSearch));
+  // CORRECTION MAJEURE ICI : Les filtres renvoient "true" si la recherche est vide.
+  const filteredUsers = allUsers.filter(u => {
+    if (!globalSearch) return true;
+    const searchLower = globalSearch.toLowerCase();
+    const nameMatch = (u.full_name || "").toLowerCase().includes(searchLower);
+    const phoneMatch = (u.phone || "").includes(globalSearch);
+    return nameMatch || phoneMatch;
+  });
+
+  const filteredChauffeurs = chauffeurs.filter(c => {
+    if (!globalSearch) return true;
+    const searchLower = globalSearch.toLowerCase();
+    const nameMatch = (c.full_name || "").toLowerCase().includes(searchLower);
+    const phoneMatch = (c.phone || "").includes(globalSearch);
+    return nameMatch || phoneMatch;
+  });
   
   const menuTitles: any = {
     dashboard: { title: "Vue d'ensemble", desc: "Statistiques globales de Yamoh." },
@@ -293,8 +305,8 @@ export default function ERPAdmin() {
               {pendingUsers.map(user => (
                 <div key={user.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col">
                   <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 bg-[#E8F4F8] text-yamo-teal font-black text-xl rounded-full flex items-center justify-center">{user.full_name?.charAt(0).toUpperCase()}</div>
-                    <div><h4 className="font-black text-lg leading-tight">{user.full_name}</h4><p className="text-xs font-bold text-gray-400 uppercase">{user.role}</p></div>
+                    <div className="w-12 h-12 bg-[#E8F4F8] text-yamo-teal font-black text-xl rounded-full flex items-center justify-center">{user.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                    <div><h4 className="font-black text-lg leading-tight">{user.full_name || 'Utilisateur'}</h4><p className="text-xs font-bold text-gray-400 uppercase">{user.role || 'Passager'}</p></div>
                   </div>
                   <div className="bg-orange-50 text-orange-600 px-4 py-3 rounded-xl text-sm font-bold flex justify-between mb-6"><span>Doc : {user.kyc_doc_type?.toUpperCase() || '?'}</span><AlertTriangle size={16} /></div>
                   <button onClick={() => openUserModal(user)} className="mt-auto w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition flex justify-center gap-2"><Eye size={18} /> Examiner</button>
@@ -323,8 +335,8 @@ export default function ERPAdmin() {
                      <div className="flex justify-between items-start mb-4">
                        <div>
                          <span className="bg-yamo-teal/10 text-yamo-teal text-xs font-black px-3 py-1 rounded-full uppercase">Aujourd'hui • {trip.heure_depart?.substring(0,5)}</span>
-                         <h4 className="font-black text-xl mt-3 flex items-center gap-2"><MapPin size={20} className="text-yamo-orange"/> {trip.depart.split(',')[0]}</h4>
-                         <h4 className="font-black text-xl text-gray-400 flex items-center gap-2"><Navigation size={20}/> {trip.destination.split(',')[0]}</h4>
+                         <h4 className="font-black text-xl mt-3 flex items-center gap-2"><MapPin size={20} className="text-yamo-orange"/> {trip.depart?.split(',')[0]}</h4>
+                         <h4 className="font-black text-xl text-gray-400 flex items-center gap-2"><Navigation size={20}/> {trip.destination?.split(',')[0]}</h4>
                        </div>
                        <div className={`w-16 h-16 rounded-full flex flex-col items-center justify-center border-4 ${isFull ? 'bg-red-50 text-red-500 border-red-100' : 'bg-green-50 text-green-500 border-green-100'}`}>
                          <span className="font-black text-xl leading-none">{totalPrises}</span>
@@ -345,7 +357,6 @@ export default function ERPAdmin() {
            )
         )}
 
-        {/* --- MODULE 4: UTILISATEURS (MISE À JOUR AVEC SUPPRESSION) --- */}
         {activeMenu === "users" && (
            loadingUsers ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
            <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
@@ -359,18 +370,17 @@ export default function ERPAdmin() {
                   {filteredUsers.map(u => (
                     <tr key={u.id} className="hover:bg-gray-50/50 transition">
                       <td className="p-6 flex items-center gap-4">
-                        <div className="w-10 h-10 bg-yamo-teal/10 text-yamo-teal font-black rounded-full flex items-center justify-center">{u.full_name?.charAt(0) || '?'}</div>
-                        <div><p className="font-bold">{u.full_name}</p><p className="text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString()}</p></div>
+                        <div className="w-10 h-10 bg-yamo-teal/10 text-yamo-teal font-black rounded-full flex items-center justify-center">{u.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                        <div><p className="font-bold">{u.full_name || 'Utilisateur'}</p><p className="text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString()}</p></div>
                       </td>
-                      <td className="p-6"><span className={`px-3 py-1 text-xs font-black uppercase rounded-lg ${u.role === 'chauffeur' ? 'bg-yamo-orange/10 text-yamo-orange' : 'bg-gray-100 text-gray-600'}`}>{u.role}</span></td>
-                      <td className="p-6 font-medium text-sm">{u.phone}</td>
+                      <td className="p-6"><span className={`px-3 py-1 text-xs font-black uppercase rounded-lg ${u.role === 'chauffeur' ? 'bg-yamo-orange/10 text-yamo-orange' : 'bg-gray-100 text-gray-600'}`}>{u.role || 'Passager'}</span></td>
+                      <td className="p-6 font-medium text-sm">{u.phone || 'N/A'}</td>
                       <td className="p-6">
                         {u.verification_status === 'verifie' ? <span className="text-green-600 font-bold text-sm flex gap-1"><CheckCircle2 size={16}/> Vérifié</span> :
                          u.verification_status === 'en_attente' ? <span className="text-orange-500 font-bold text-sm flex gap-1"><Clock size={16}/> Attente</span> :
                          <span className="text-gray-400 font-bold text-sm flex gap-1"><ShieldCheck size={16}/> Non initié</span>}
                       </td>
                       <td className="p-6 text-right">
-                        {/* BOUTON DE SUPPRESSION AJOUTÉ ICI */}
                         <button 
                           onClick={() => handleDeleteUser(u.id, u.full_name)}
                           className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-xl transition" 
@@ -381,6 +391,7 @@ export default function ERPAdmin() {
                       </td>
                     </tr>
                   ))}
+                  {filteredUsers.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-gray-400 font-bold">Aucun utilisateur trouvé.</td></tr>}
                 </tbody>
              </table>
            </div>
@@ -415,8 +426,8 @@ export default function ERPAdmin() {
                   <tbody className="divide-y divide-gray-50">
                     {filteredChauffeurs.map(c => (
                       <tr key={c.id} className="hover:bg-gray-50/50 transition">
-                        <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 bg-gray-100 font-black rounded-full flex items-center justify-center text-gray-700">{c.full_name?.charAt(0) || '?'}</div><p className="font-bold">{c.full_name}</p></td>
-                        <td className="p-6 font-medium text-sm text-gray-600">{c.phone}</td>
+                        <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 bg-gray-100 font-black rounded-full flex items-center justify-center text-gray-700">{c.full_name?.charAt(0)?.toUpperCase() || '?'}</div><p className="font-bold">{c.full_name || 'Utilisateur'}</p></td>
+                        <td className="p-6 font-medium text-sm text-gray-600">{c.phone || 'N/A'}</td>
                         <td className="p-6"><span className={`font-black text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>{c.solde_wallet || 0} FCFA</span></td>
                         <td className="p-6 text-right"><button onClick={() => handleRechargerWallet(c)} className="bg-yamo-teal/10 text-yamo-teal hover:bg-yamo-teal hover:text-white font-bold px-4 py-2 rounded-xl transition flex items-center gap-2 ml-auto"><PlusCircle size={16}/> Recharger</button></td>
                       </tr>
@@ -434,7 +445,7 @@ export default function ERPAdmin() {
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
             <header className="px-8 py-6 border-b border-gray-100 flex justify-between bg-gray-50">
-              <div><h3 className="text-2xl font-black text-gray-900">Examen : {selectedUser.full_name}</h3><p className="text-gray-500 font-medium">Type : {selectedUser.kyc_doc_type?.toUpperCase()}</p></div>
+              <div><h3 className="text-2xl font-black text-gray-900">Examen : {selectedUser.full_name || 'Utilisateur'}</h3><p className="text-gray-500 font-medium">Type : {selectedUser.kyc_doc_type?.toUpperCase() || '?'}</p></div>
               <button onClick={() => setSelectedUser(null)} className="p-2 bg-gray-200 rounded-full hover:bg-gray-300"><XCircle size={24}/></button>
             </header>
             <div className="p-8 overflow-y-auto flex-1 bg-gray-100">
