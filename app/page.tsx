@@ -145,9 +145,9 @@ export default function Home() {
       const { data, error } = await supabase
         .from('trajets')
         .select('*')
-        .gte('date_depart', today) // Uniquement les trajets à partir d'aujourd'hui
+        .gte('date_depart', today)
         .order('date_depart', { ascending: true })
-        .limit(6); // On prend les 6 prochains
+        .limit(6); 
 
       if (data && !error) {
         setLiveTrips(data);
@@ -174,7 +174,6 @@ export default function Home() {
     alert("À la prochaine sur Yamoh !");
   };
 
-  // Fonction pour formater la date proprement
   const formatDate = (dateString: string) => {
     if (!dateString) return "Date à préciser";
     const options: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'short' };
@@ -307,7 +306,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- TRAJETS EN TEMPS RÉEL (NOUVEAU) --- */}
+      {/* --- TRAJETS EN TEMPS RÉEL --- */}
       <section className="py-24 px-6 max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-4">
           <div>
@@ -331,7 +330,6 @@ export default function Home() {
         ) : liveTrips.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {liveTrips.map((trip) => {
-              // On nettoie les adresses pour l'URL en ne gardant que la ville/quartier
               const lienDepart = trip.depart ? encodeURIComponent(trip.depart.split(',')[0]) : "";
               const lienDest = trip.destination ? encodeURIComponent(trip.destination.split(',')[0]) : "";
               const lienDate = trip.date_depart ? trip.date_depart.split('T')[0] : "";
@@ -339,7 +337,6 @@ export default function Home() {
               return (
                 <div key={trip.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
                   
-                  {/* En-tête : Date et Heure */}
                   <div className="flex justify-between items-center border-b border-gray-50 pb-4 mb-4">
                     <div className="flex items-center gap-2 text-yamo-teal font-bold bg-yamo-teal/10 px-3 py-1.5 rounded-xl text-sm">
                       <Calendar size={16} />
@@ -353,7 +350,6 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* Corps : Départ / Arrivée */}
                   <div className="flex gap-4 mb-6 relative">
                     <div className="flex flex-col items-center mt-1">
                       <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
@@ -366,7 +362,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Footer : Chauffeur & Réservation */}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-50">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black">
@@ -382,7 +377,6 @@ export default function Home() {
                     
                     <div className="flex flex-col items-end">
                       <p className="text-2xl font-black text-yamo-teal">{trip.prix} <span className="text-sm font-bold">FCFA</span></p>
-                      {/* LE LIEN EST MAINTENANT NETTOYÉ */}
                       <Link href={`/recherche?depart=${lienDepart}&destination=${lienDest}&date=${lienDate}&passagers=1`}>
                         <button className="mt-2 text-sm bg-gray-50 text-yamo-teal font-bold px-4 py-2 rounded-xl group-hover:bg-yamo-teal group-hover:text-white transition">
                           Réserver
@@ -408,7 +402,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* --- CONFIANCE & CHOIX --- */}
+      {/* --- CONFIANCE & CHOIX (MIS À JOUR AVEC LE JARGON) --- */}
       <section className="py-24 bg-gray-50 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-16 mb-24">
@@ -429,21 +423,23 @@ export default function Home() {
             </div>
           </div>
 
-          <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">On bouge comment aujourd'hui ?</h2>
+          {/* LA SECTION MODIFIÉE SANS LE VTC */}
+          <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">Choisis ton wé, on gère le reste !</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
             <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer group">
               <div className="bg-[#E8F4F8] p-6 rounded-[2rem] text-yamo-teal group-hover:bg-yamo-teal group-hover:text-white transition-all"><Car size={40}/></div>
               <div className="flex-1">
-                <h4 className="text-2xl font-black">Covoiturage</h4>
-                <p className="text-gray-500 font-medium italic text-lg">Le transport est cher ? Partagez les frais !</p>
+                <h4 className="text-2xl font-black">Trajet Express</h4>
+                <p className="text-gray-500 font-medium italic text-lg">Un gombo urgent ou une course ? On part ensemble, c'est moins cher !</p>
               </div>
               <ArrowRight className="text-gray-300 group-hover:text-yamo-teal group-hover:translate-x-2 transition-all" size={32} />
             </div>
+            
             <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer group">
-              <div className="bg-[#FFF0E8] p-6 rounded-[2rem] text-yamo-orange group-hover:bg-yamo-orange group-hover:text-white transition-all"><Car size={40}/></div>
+              <div className="bg-[#FFF0E8] p-6 rounded-[2rem] text-yamo-orange group-hover:bg-yamo-orange group-hover:text-white transition-all"><Calendar size={40}/></div>
               <div className="flex-1">
-                <h4 className="text-2xl font-black">VTC & Pro</h4>
-                <p className="text-gray-500 font-medium italic text-lg">Pour un trajet calme, VIP et climatisé.</p>
+                <h4 className="text-2xl font-black">Pass Boulot-Dodo</h4>
+                <p className="text-gray-500 font-medium italic text-lg">Fini les rangs à la gare ! Abonne-toi pour toute la semaine avec ton voisin.</p>
               </div>
               <ArrowRight className="text-gray-300 group-hover:text-yamo-orange group-hover:translate-x-2 transition-all" size={32} />
             </div>
