@@ -11,8 +11,15 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  
+  // NOUVEAU : États pour l'indicateur de frappe
+  const [isTyping, setIsTyping] = useState(false);
+  const channelRef = useRef<any>(null);
+  const typingTimeoutRef = useRef<any>(null);
+  
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // 1. Initialisation
   useEffect(() => {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -51,9 +58,11 @@ export default function MessagesPage() {
     init();
   }, []);
 
+  // 2. Gestion des Messages et du "Broadcast" (Indicateur de frappe)
   useEffect(() => {
     if (!selectedConv) return;
 
+    // Charger l'historique
     const fetchMessages = async () => {
       const { data } = await supabase
         .from('messages')
@@ -62,38 +71,93 @@ export default function MessagesPage() {
         .order('created_at', { ascending: true });
       if (data) setMessages(data);
     };
-
     fetchMessages();
 
-    const channel = supabase
-      .channel(`chat-${selectedConv.id}`)
+    // Configuration de la chaîne temps réel AVEC le Broadcast activé
+    const channel = supabase.channel(`chat-${selectedConv.id}`, {
+      config: {
+        broadcast: { self: false } // On ne veut pas recevoir nos propres notifications de frappe
+      }
+    });
+    
+    channelRef.current = channel;
+
+    channel
+      // Écoute les nouveaux messages (Base de données)
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${selectedConv.id}` }, 
         (payload) => {
-          // ANTI-DOUBLON : On vérifie si on n'a pas déjà affiché ce message manuellement
           setMessages((prev) => {
             if (prev.some(m => m.id === payload.new.id)) return prev;
             return [...prev, payload.new];
           });
+          // Si on reçoit un message, l'autre a forcément arrêté d'écrire
+          setIsTyping(false);
         }
       )
+      // NOUVEAU : Écoute les signaux "En train d'écrire" invisibles
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        if (payload.payload.userId !== userId) {
+          setIsTyping(payload.payload.isTyping);
+        }
+      })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [selectedConv]);
+    return () => { 
+      supabase.removeChannel(channel); 
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [selectedConv, userId]);
 
+  // Scroll automatique vers le bas
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isTyping]); // On scrolle aussi quand la bulle de frappe apparaît
 
+  // NOUVEAU : Fonction déclenchée à chaque lettre tapée
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+
+    // Envoyer le signal "Je tape"
+    if (channelRef.current && userId) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { userId: userId, isTyping: true }
+      });
+
+      // Annuler l'ancien chronomètre
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+      // Si on arrête de taper pendant 2 secondes, on envoie le signal "J'ai arrêté"
+      typingTimeoutRef.current = setTimeout(() => {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { userId: userId, isTyping: false }
+        });
+      }, 2000);
+    }
+  };
+
+  // 3. Envoyer le message
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !userId || !selectedConv) return;
 
     const messageToSend = newMessage;
-    setNewMessage(""); // On vide le champ pour que ce soit fluide
+    setNewMessage(""); 
 
-    // 1. On insère dans la base ET on récupère la ligne générée (.select().single())
+    // On dit tout de suite aux autres qu'on a arrêté de taper
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { userId: userId, isTyping: false }
+      });
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    }
+
     const { data, error } = await supabase
       .from('messages')
       .insert([{
@@ -106,9 +170,8 @@ export default function MessagesPage() {
 
     if (error) {
       alert("Erreur d'envoi du message : " + error.message);
-      setNewMessage(messageToSend); // En cas d'erreur, on remet le texte dans le champ
+      setNewMessage(messageToSend);
     } else if (data) {
-      // 2. AFFICHAGE INSTANTANÉ : On ajoute le message validé directement dans notre liste locale
       setMessages((prev) => {
         if (prev.some(m => m.id === data.id)) return prev;
         return [...prev, data];
@@ -183,13 +246,26 @@ export default function MessagesPage() {
                   </div>
                 ))
               )}
+              
+              {/* NOUVEAU : LA BULLE D'ANIMATION "EN TRAIN D'ÉCRIRE..." */}
+              {isTyping && (
+                <div className="flex justify-start mb-4">
+                  <div className="bg-white border border-gray-100 p-4 rounded-[1.5rem] rounded-tl-none shadow-sm flex gap-1.5 items-center h-12">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
+              )}
+
               <div ref={scrollRef} />
             </div>
 
+            {/* FORMULAIRE AVEC LE NOUVEAU HANDLER "handleTyping" */}
             <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-100 flex gap-2 items-center shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
               <input 
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={handleTyping}
                 placeholder="Écrivez votre message ici..."
                 className="flex-1 bg-gray-50 p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-yamo-teal/20 transition font-medium"
               />
