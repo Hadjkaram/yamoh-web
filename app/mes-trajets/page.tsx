@@ -2,64 +2,88 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, QrCode, MapPin, X, CheckCircle2, Download } from "lucide-react";
+import { ArrowLeft, QrCode, MapPin, X, CheckCircle2, Download, Star } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import QRCode from "react-qr-code"; 
+
+const TAGS_CHAUFFEUR = ["Conduite prudente", "Véhicule propre", "Bonne musique", "Ponctuel", "Climatisé", "Agréable"];
 
 export default function MesTrajets() {
   const router = useRouter();
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedResa, setSelectedResa] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+  
+  // MODALS
+  const [selectedResa, setSelectedResa] = useState<any>(null); // Pour le QR Code
+  const [ratingModal, setRatingModal] = useState<any>(null); // Pour noter le chauffeur
+
+  // ÉTATS DE NOTATION
+  const [rating, setRating] = useState(0);
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [comment, setComment] = useState("");
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [avisSoumis, setAvisSoumis] = useState<string[]>([]); // Stocke localement les ID notés
 
   useEffect(() => {
     async function fetchMesReservations() {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/connexion');
-        return;
-      }
+      if (!session) { router.push('/connexion'); return; }
+      setUser(session.user);
 
-      // NOUVEAU : On récupère aussi le "statut" pour savoir s'il est déjà scanné
       const { data, error } = await supabase
         .from('reservations')
         .select(`
-          id,
-          date_reservation,
-          statut,
-          trajets (
-            depart,
-            destination,
-            prix,
-            conducteur_nom,
-            vehicule
-          )
+          id, date_reservation, statut, trajet_id,
+          trajets ( id, user_id, depart, destination, prix, conducteur_nom, vehicule )
         `)
         .eq('passager_email', session.user.email)
         .order('date_reservation', { ascending: false });
 
-      if (!error && data) {
-        setReservations(data);
-      }
+      if (!error && data) setReservations(data);
       setLoading(false);
     }
-
     fetchMesReservations();
   }, [router]);
 
-  // Fonction pour déclencher l'impression / sauvegarde PDF du navigateur
-  const handleDownloadPDF = () => {
-    window.print();
+  const handleDownloadPDF = () => window.print();
+
+  const toggleTag = (tag: string) => {
+    if (selectedTags.includes(tag)) setSelectedTags(selectedTags.filter(t => t !== tag));
+    else setSelectedTags([...selectedTags, tag]);
+  };
+
+  const handleRatingSubmit = async () => {
+    if (rating === 0) { alert("Veuillez donner au moins une étoile."); return; }
+    setIsSubmittingRating(true);
+
+    const { error } = await supabase.from('avis').insert([{
+      trajet_id: ratingModal.trajet_id,
+      auteur_id: user.id,
+      destinataire_id: ratingModal.trajets.user_id, // L'ID du chauffeur
+      note: rating,
+      tags: selectedTags.join(','),
+      commentaire: comment
+    }]);
+
+    setIsSubmittingRating(false);
+    if (!error) {
+      setAvisSoumis([...avisSoumis, ratingModal.id]); // Masque le bouton pour cette résa
+      setRatingModal(null);
+      setRating(0);
+      setSelectedTags([]);
+      setComment("");
+    } else {
+      alert("Erreur lors de l'envoi de l'avis.");
+    }
   };
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col font-sans pb-12 relative">
-      {/* On cache le header lors de l'impression PDF */}
       <header className="px-6 py-4 bg-white shadow-sm flex items-center gap-4 sticky top-0 z-40 print:hidden">
-        <Link href="/">
-          <ArrowLeft size={24} className="text-gray-600 hover:text-black" />
-        </Link>
+        <Link href="/"><ArrowLeft size={24} className="text-gray-600 hover:text-black transition" /></Link>
         <h1 className="text-xl font-bold text-yamo-teal">Mes réservations</h1>
       </header>
 
@@ -70,15 +94,13 @@ export default function MesTrajets() {
           <div className="text-center py-10 bg-white rounded-3xl p-8 border border-gray-100 print:hidden">
             <QrCode size={64} className="text-gray-300 mx-auto mb-4" />
             <p className="text-xl font-bold text-gray-800">Aucun trajet réservé</p>
-            <p className="text-gray-500 mt-2">Vos prochains billets apparaîtront ici.</p>
-            <Link href="/">
-              <button className="mt-6 bg-yamo-orange text-white font-bold px-6 py-3 rounded-full">Rechercher un trajet</button>
-            </Link>
+            <Link href="/"><button className="mt-6 bg-yamo-orange text-white font-bold px-6 py-3 rounded-full">Rechercher un trajet</button></Link>
           </div>
         ) : (
           <div className="flex flex-col gap-6">
             {reservations.map((resa) => {
               const isUsed = resa.statut === 'valide';
+              const isRated = avisSoumis.includes(resa.id);
 
               return (
                 <div key={resa.id} className={`rounded-3xl p-6 shadow-lg text-white relative overflow-hidden print:shadow-none print:border print:border-gray-300 print:text-black ${isUsed ? 'bg-gray-400' : 'bg-yamo-teal'}`}>
@@ -88,7 +110,7 @@ export default function MesTrajets() {
                   <div className="relative z-10">
                     <div className="flex justify-between items-center mb-6">
                       <span className="font-black text-xl tracking-widest opacity-80">YAMOH TICKET</span>
-                      {isUsed && <span className="bg-white text-gray-800 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider print:border print:border-gray-800">Utilisé</span>}
+                      {isUsed && <span className="bg-white text-gray-800 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider print:border print:border-gray-800">Terminé</span>}
                     </div>
 
                     <div className="flex items-center gap-4 mb-8">
@@ -98,8 +120,8 @@ export default function MesTrajets() {
                         <div className={`w-4 h-4 rounded-full border-4 bg-white ${isUsed ? 'border-gray-300' : 'border-yamo-orange'} print:border-black`}></div>
                       </div>
                       <div className="flex flex-col justify-between h-20">
-                        <p className="text-2xl font-bold">{resa.trajets.depart}</p>
-                        <p className="text-2xl font-bold">{resa.trajets.destination}</p>
+                        <p className="text-2xl font-bold">{resa.trajets.depart.split(',')[0]}</p>
+                        <p className="text-2xl font-bold">{resa.trajets.destination.split(',')[0]}</p>
                       </div>
                     </div>
 
@@ -111,25 +133,27 @@ export default function MesTrajets() {
                           <p className="text-sm opacity-80">{resa.trajets.vehicule}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm opacity-80 mb-1 font-medium">Montant à régler</p>
-                          <p className={`text-2xl font-black ${isUsed ? 'text-white' : 'text-yamo-orange'} print:text-black`}>
-                            {resa.trajets.prix} FCFA
-                          </p>
+                          <p className="text-sm opacity-80 mb-1 font-medium">Montant réglé</p>
+                          <p className={`text-2xl font-black ${isUsed ? 'text-white' : 'text-yamo-orange'} print:text-black`}>{resa.trajets.prix} FCFA</p>
                         </div>
                       </div>
                       
-                      {/* NOUVEAU LOGIQUE : Si utilisé = Disparait. Sinon = Bouton QR */}
+                      {/* SI PAS UTILISÉ : BOUTON QR CODE */}
                       {!isUsed ? (
-                        <button 
-                          onClick={() => setSelectedResa(resa)}
-                          className="w-full bg-white text-yamo-teal font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition cursor-pointer print:hidden"
-                        >
+                        <button onClick={() => setSelectedResa(resa)} className="w-full bg-white text-yamo-teal font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition print:hidden">
                           <QrCode size={20} /> Afficher le QR Code
                         </button>
                       ) : (
-                        <div className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 print:text-gray-800 print:bg-transparent">
-                          <CheckCircle2 size={20} /> Billet validé par le chauffeur
-                        </div>
+                        /* SI UTILISÉ ET PAS ENCORE NOTÉ : BOUTON NOTER */
+                        !isRated ? (
+                           <button onClick={() => setRatingModal(resa)} className="w-full bg-yamo-orange text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-[#D55A1A] transition shadow-lg print:hidden">
+                             <Star size={20} className="fill-current" /> Noter le conducteur
+                           </button>
+                        ) : (
+                           <div className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 print:text-gray-800 print:bg-transparent">
+                             <CheckCircle2 size={20} /> Merci pour votre avis !
+                           </div>
+                        )
                       )}
                     </div>
                   </div>
@@ -140,50 +164,82 @@ export default function MesTrajets() {
         )}
       </div>
 
-      {/* LA FENÊTRE MODALE DU QR CODE (Cachée à l'impression, gérée avec un autre style) */}
+      {/* --- LE MODAL DU QR CODE --- */}
       {selectedResa && (
-        <div 
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6 backdrop-blur-sm transition-opacity print:bg-white print:items-start print:pt-10"
-          onClick={() => setSelectedResa(null)}
-        >
-          <div 
-            className="bg-white p-8 rounded-[2rem] w-full max-w-sm flex flex-col items-center relative shadow-2xl print:shadow-none print:w-full print:max-w-none"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => setSelectedResa(null)}
-              className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition cursor-pointer print:hidden"
-            >
-              <X size={20} />
-            </button>
-
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6 backdrop-blur-sm transition-opacity print:bg-white print:items-start print:pt-10" onClick={() => setSelectedResa(null)}>
+          <div className="bg-white p-8 rounded-[2rem] w-full max-w-sm flex flex-col items-center relative shadow-2xl print:shadow-none print:w-full print:max-w-none" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setSelectedResa(null)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition print:hidden"><X size={20} /></button>
             <h3 className="text-2xl font-black text-yamo-teal mb-2 text-center">Billet Yamoh</h3>
-            <p className="text-gray-500 text-center mb-8 print:hidden">Présentez ce code à {selectedResa.trajets.conducteur_nom} avant de monter.</p>
-            
-            <div className="bg-white p-4 rounded-2xl border-4 border-yamo-teal shadow-inner mb-6">
-              <QRCode 
-                value={selectedResa.id} 
-                size={220}
-                fgColor="#166C82" 
-              />
-            </div>
-
-            <div className="w-full bg-gray-50 p-4 rounded-xl mb-6 text-center border border-gray-100">
-              <p className="font-bold text-gray-900">{selectedResa.trajets.depart} → {selectedResa.trajets.destination}</p>
-              <p className="text-sm text-gray-500 mt-1">Conducteur : {selectedResa.trajets.conducteur_nom}</p>
-            </div>
-
-            {/* BOUTON TÉLÉCHARGER EN PDF */}
-            <button 
-              onClick={handleDownloadPDF}
-              className="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-black transition print:hidden"
-            >
-              <Download size={20} /> Sauvegarder en PDF
-            </button>
-            <p className="text-xs text-gray-400 mt-4 font-mono text-center print:text-black">ID: {selectedResa.id}</p>
+            <p className="text-gray-500 text-center mb-8 print:hidden">Présentez ce code à {selectedResa.trajets.conducteur_nom}.</p>
+            <div className="bg-white p-4 rounded-2xl border-4 border-yamo-teal shadow-inner mb-6"><QRCode value={selectedResa.id} size={220} fgColor="#166C82" /></div>
+            <button onClick={handleDownloadPDF} className="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-black transition print:hidden"><Download size={20} /> Sauvegarder en PDF</button>
           </div>
         </div>
       )}
+
+      {/* --- LE MODAL DE NOTATION (APPARAÎT QUAND LE PASSAGER VEUX NOTER) --- */}
+      {ratingModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-md relative animate-in zoom-in duration-300">
+            <button onClick={() => {setRatingModal(null); setRating(0); setSelectedTags([]);}} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition">
+              <X size={20} />
+            </button>
+            
+            <div className="w-20 h-20 bg-yamo-teal/10 text-yamo-teal rounded-full flex items-center justify-center mb-4 shadow-inner font-black text-3xl">
+              {ratingModal.trajets.conducteur_nom.charAt(0).toUpperCase()}
+            </div>
+            
+            <h2 className="text-2xl font-black text-gray-900 text-center mb-1">Noter {ratingModal.trajets.conducteur_nom}</h2>
+            <p className="text-gray-500 text-sm mb-6 text-center">Comment s'est passé votre voyage de {ratingModal.trajets.depart.split(',')[0]} à {ratingModal.trajets.destination.split(',')[0]} ?</p>
+            
+            {/* Les Étoiles */}
+            <div className="flex items-center gap-2 mb-6">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button 
+                  key={star}
+                  onMouseEnter={() => setHoveredRating(star)}
+                  onMouseLeave={() => setHoveredRating(0)}
+                  onClick={() => setRating(star)}
+                  className="p-1 transition-transform hover:scale-110"
+                >
+                  <Star size={36} className={`${(hoveredRating || rating) >= star ? 'fill-yamo-orange text-yamo-orange' : 'text-gray-200'} transition-colors duration-200`} />
+                </button>
+              ))}
+            </div>
+
+            {/* Les Badges Interactifs */}
+            <div className="flex flex-wrap justify-center gap-2 mb-6">
+              {TAGS_CHAUFFEUR.map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 border-2 ${selectedTags.includes(tag) ? 'bg-yamo-teal text-white border-yamo-teal' : 'bg-gray-50 text-gray-500 border-gray-100 hover:border-gray-200'}`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+
+            {/* Commentaire optionnel */}
+            <textarea
+              placeholder="Un petit mot sur le chauffeur ? (Optionnel)"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              className="w-full bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal mb-6 font-medium text-sm resize-none"
+              rows={3}
+            ></textarea>
+
+            <button 
+              onClick={handleRatingSubmit} 
+              disabled={isSubmittingRating || rating === 0}
+              className={`w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 ${rating === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-yamo-orange text-white hover:bg-[#D55A1A] shadow-lg shadow-yamo-orange/20'}`}
+            >
+              {isSubmittingRating ? "Envoi..." : "Envoyer mon avis"}
+            </button>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
