@@ -38,36 +38,42 @@ export default function Connexion() {
     setLoading(true);
     setErrorMsg("");
 
+    // 1. On nettoie le numéro (enlève les espaces)
     const formattedPhone = phoneInput.replace(/\s+/g, '');
+    
+    // 2. On ajoute l'indicatif pour l'affichage dans le profil
+    let finalPhone = formattedPhone;
+    if (!finalPhone.startsWith('+')) {
+      finalPhone = '+225' + finalPhone;
+    }
+
+    // 3. L'ASTUCE MAGIQUE : On transforme le numéro en "faux email" pour Supabase
+    // Ex: +2250748361123 devient 2250748361123@yamoh.net
+    const fakeEmail = `${finalPhone.replace('+', '')}@yamoh.net`;
 
     if (isLogin) {
       // --- CONNEXION ---
       const { error } = await supabase.auth.signInWithPassword({
-        phone: formattedPhone,
+        email: fakeEmail, // On utilise le faux email pour se connecter
         password,
       });
+      
       if (error) setErrorMsg("Numéro ou mot de passe incorrect.");
       else router.push("/");
       
     } else {
       // --- INSCRIPTION ---
-      let finalPhone = formattedPhone;
-      if (!finalPhone.startsWith('+')) {
-        finalPhone = '+225' + finalPhone;
-      }
-
       const { data, error } = await supabase.auth.signUp({
-        phone: finalPhone,
+        email: fakeEmail, // On utilise le faux email pour contourner le blocage
         password,
         options: {
           data: {
             full_name: name,
-            phone: finalPhone,
+            phone: finalPhone, // On sauvegarde quand même son VRAI numéro dans son profil !
             birth_date: birthDate,
             gender: gender,
             role: role,
             verification_status: 'non_verifie',
-            // Si c'est un chauffeur, on sauvegarde les infos de la voiture
             ...(role === 'chauffeur' && {
               vehicule_marque: vehiculeMarque,
               vehicule_couleur: vehiculeCouleur,
@@ -83,7 +89,6 @@ export default function Connexion() {
         setErrorMsg(error.message);
       } else {
         alert("Compte créé avec succès ! Passons à la vérification de vos documents.");
-        // On passe à la page de vérification d'identité
         router.push("/verif-identite");
       }
     }
