@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Car, User, Coins, MapPin, History } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Car, User, Coins, MapPin, History, Calendar, Clock } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -119,6 +119,11 @@ export default function PublierTrajet() {
   const [places, setPlaces] = useState("3");
   const [vehicule, setVehicule] = useState("");
   
+  // NOUVEAUX CHAMPS DE PROGRAMMATION
+  const [dateDepart, setDateDepart] = useState(new Date().toISOString().split('T')[0]); // Date du jour par défaut
+  const [heureDepart, setHeureDepart] = useState("");
+  const [lieuRdv, setLieuRdv] = useState("");
+  
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -131,7 +136,7 @@ export default function PublierTrajet() {
       } else {
         setUser(session.user);
         
-        // RECUPERATION DES DONNEES DU VEHICULE DEPUIS LE PROFIL
+        // RECUPERATION DES DONNEES DU VEHICULE
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('vehicule_marque, vehicule_couleur, vehicule_plaque')
@@ -139,7 +144,6 @@ export default function PublierTrajet() {
           .single();
 
         if (profileData && !profileError) {
-          // On assemble les informations si elles existent (Ex: "Toyota Corolla - Gris - 1234 AB 01")
           const infosVehicule = [
             profileData.vehicule_marque, 
             profileData.vehicule_couleur, 
@@ -169,7 +173,11 @@ export default function PublierTrajet() {
           places_disponibles: parseInt(places),
           conducteur_nom: user?.user_metadata?.full_name || "Conducteur",
           vehicule: vehicule,
-          user_id: user?.id
+          user_id: user?.id,
+          // NOUVELLES COLONNES AJOUTÉES
+          date_depart: dateDepart,
+          heure_depart: heureDepart,
+          lieu_rendez_vous: lieuRdv
         }
       ]);
 
@@ -191,8 +199,8 @@ export default function PublierTrajet() {
     return (
       <main className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
         <CheckCircle2 size={80} className="text-green-500 mb-6 animate-bounce" />
-        <h1 className="text-3xl font-black text-yamo-teal mb-2">Trajet en ligne !</h1>
-        <p className="text-gray-500 text-lg">Votre annonce est visible par toute la communauté.</p>
+        <h1 className="text-3xl font-black text-yamo-teal mb-2">Trajet programmé !</h1>
+        <p className="text-gray-500 text-lg">Les passagers savent maintenant exactement quand et où vous retrouver.</p>
       </main>
     );
   }
@@ -207,7 +215,7 @@ export default function PublierTrajet() {
       </header>
 
       <div className="p-4 md:p-8 max-w-2xl mx-auto w-full mt-6">
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-6">
+        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-8">
           
           <div className="bg-yamo-teal/5 p-4 rounded-2xl flex items-center gap-3">
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-yamo-teal/20 shadow-sm">
@@ -216,50 +224,90 @@ export default function PublierTrajet() {
             <p className="font-bold text-yamo-teal">Publication en tant que : {user?.user_metadata?.full_name}</p>
           </div>
 
-          <div className="flex flex-col gap-4 relative">
-            <div className="absolute left-[1.35rem] top-10 bottom-10 w-1 bg-gray-100 z-0"></div>
+          {/* SECTION 1 : ITINÉRAIRE */}
+          <div>
+            <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2"><MapPin size={20} className="text-yamo-teal"/> Itinéraire</h3>
+            <div className="flex flex-col gap-4 relative">
+              <div className="absolute left-[1.35rem] top-10 bottom-10 w-1 bg-gray-100 z-0"></div>
+              
+              <FormLocationAutocomplete 
+                placeholder="Départ (ex: Riviera Palmeraie)"
+                value={depart}
+                onChange={setDepart}
+                dotColor="border-gray-300"
+                focusColor="yamo-teal"
+              />
+
+              <FormLocationAutocomplete 
+                placeholder="Arrivée (ex: Plateau)"
+                value={destination}
+                onChange={setDestination}
+                dotColor="border-yamo-orange"
+                focusColor="yamo-orange"
+              />
+            </div>
+          </div>
+
+          <hr className="border-gray-100" />
+
+          {/* SECTION 2 : PROGRAMMATION (NOUVEAU) */}
+          <div>
+            <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2"><Calendar size={20} className="text-yamo-teal"/> Programmation & RDV</h3>
             
-            <FormLocationAutocomplete 
-              placeholder="Départ (ex: Riviera Palmeraie)"
-              value={depart}
-              onChange={setDepart}
-              dotColor="border-gray-300"
-              focusColor="yamo-teal"
-            />
-
-            <FormLocationAutocomplete 
-              placeholder="Arrivée (ex: Plateau)"
-              value={destination}
-              onChange={setDestination}
-              dotColor="border-yamo-orange"
-              focusColor="yamo-orange"
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2"><Car size={16}/> Votre Véhicule</label>
-            <input type="text" required placeholder="Ex: Toyota Corolla (Climatisé)" className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-medium" value={vehicule} onChange={(e) => setVehicule(e.target.value)} />
-            <p className="text-xs text-gray-400">Rempli automatiquement avec vos informations de profil.</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2"><Coins size={16}/> Prix (FCFA)</label>
-              <input type="number" required placeholder="1500" className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-black text-yamo-orange" value={prix} onChange={(e) => setPrix(e.target.value)} />
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-gray-500 uppercase">Date du départ</label>
+                <div className="relative flex items-center">
+                  <Calendar size={18} className="absolute left-4 text-gray-400 pointer-events-none" />
+                  <input type="date" required className="bg-gray-50 pl-11 pr-2 py-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal w-full font-bold text-gray-800" value={dateDepart} onChange={(e) => setDateDepart(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-gray-500 uppercase">Heure exacte</label>
+                <div className="relative flex items-center">
+                  <Clock size={18} className="absolute left-4 text-gray-400 pointer-events-none" />
+                  <input type="time" required className="bg-gray-50 pl-11 pr-2 py-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal w-full font-bold text-gray-800" value={heureDepart} onChange={(e) => setHeureDepart(e.target.value)} />
+                </div>
+              </div>
             </div>
+
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2"><User size={16}/> Places</label>
-              <select className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-bold appearance-none" value={places} onChange={(e) => setPlaces(e.target.value)}>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-              </select>
+              <label className="text-sm font-bold text-gray-500 uppercase">Lieu précis de prise en charge</label>
+              <input type="text" required placeholder="Ex: Devant la pharmacie de la 9ème tranche" className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-medium" value={lieuRdv} onChange={(e) => setLieuRdv(e.target.value)} />
+              <p className="text-xs text-gray-400">Aidez les passagers à vous trouver facilement.</p>
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className={`w-full text-white font-black text-xl py-5 rounded-[1.5rem] shadow-xl transition duration-300 mt-4 ${loading ? 'bg-gray-300' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
-            {loading ? "Chargement..." : "Lancer mon trajet"}
+          <hr className="border-gray-100" />
+
+          {/* SECTION 3 : DÉTAILS DU VOYAGE */}
+          <div>
+            <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2"><Car size={20} className="text-yamo-teal"/> Détails du trajet</h3>
+            
+            <div className="flex flex-col gap-2 mb-4">
+              <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2">Votre Véhicule</label>
+              <input type="text" required placeholder="Ex: Toyota Corolla (Climatisé)" className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-medium" value={vehicule} onChange={(e) => setVehicule(e.target.value)} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2"><Coins size={16}/> Prix (FCFA)</label>
+                <input type="number" required placeholder="1500" className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-black text-yamo-orange" value={prix} onChange={(e) => setPrix(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2"><User size={16}/> Places</label>
+                <select className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-bold appearance-none" value={places} onChange={(e) => setPlaces(e.target.value)}>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" disabled={loading} className={`w-full text-white font-black text-xl py-5 rounded-[1.5rem] shadow-xl transition duration-300 mt-2 ${loading ? 'bg-gray-300' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
+            {loading ? "Chargement..." : "Programmer mon trajet"}
           </button>
         </form>
       </div>
