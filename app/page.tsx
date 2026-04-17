@@ -7,12 +7,12 @@ import {
   Search, Calendar, User, PlusCircle, ShieldCheck, 
   SmartphoneNfc, PiggyBank, LogOut, ChevronDown, 
   Car, MessageSquare, CreditCard, Ticket, ArrowRight,
-  Share2, MapPin, History // Nouvelles icônes pour les suggestions
+  Share2, MapPin, History, Clock, Users
 } from "lucide-react";
 import { supabase } from "@/lib/supabase"; 
 import NotificationBell from "@/components/NotificationBell";
 
-// --- COMPOSANT INTELLIGENT D'AUTO-COMPLÉTION (NOUVEAU) ---
+// --- COMPOSANT INTELLIGENT D'AUTO-COMPLÉTION ---
 function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderClass }: any) {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [history, setHistory] = useState<string[]>([]);
@@ -20,13 +20,11 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
   const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Charger l'historique au démarrage
   useEffect(() => {
     const savedHistory = JSON.parse(localStorage.getItem('yamoh_search_history') || '[]');
     setHistory(savedHistory);
   }, []);
 
-  // Fermer le menu si on clique en dehors
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -37,7 +35,6 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Chercher les adresses en direct via OpenStreetMap (Gratuit)
   const fetchSuggestions = async (query: string) => {
     onChange(query);
     if (query.length < 2) {
@@ -46,7 +43,6 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
     }
     setLoading(true);
     try {
-      // On restreint la recherche à Abidjan, Côte d'Ivoire
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}, Abidjan, Côte d'Ivoire&limit=5`);
       const data = await res.json();
       setSuggestions(data);
@@ -59,8 +55,6 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
   const handleSelect = (adresse: string) => {
     onChange(adresse);
     setShowDropdown(false);
-    
-    // Sauvegarder dans l'historique (max 5)
     const newHistory = [adresse, ...history.filter(h => h !== adresse)].slice(0, 5);
     setHistory(newHistory);
     localStorage.setItem('yamoh_search_history', JSON.stringify(newHistory));
@@ -81,11 +75,8 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
         onFocus={() => setShowDropdown(true)}
       />
 
-      {/* MENU DÉROULANT DES SUGGESTIONS */}
       {showDropdown && (value.length > 0 || history.length > 0) && (
         <div className="absolute top-[100%] left-0 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-          
-          {/* Historique si le champ est vide */}
           {value.length === 0 && history.length > 0 && (
             <div className="p-2">
               <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Recherches récentes</p>
@@ -98,7 +89,6 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
             </div>
           )}
 
-          {/* Résultats de recherche en direct */}
           {value.length >= 2 && (
             <div className="p-2">
               <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Lieux trouvés</p>
@@ -109,9 +99,7 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
                   <div key={idx} onClick={() => handleSelect(item.display_name.split(',')[0])} className="flex items-start gap-3 px-4 py-3 hover:bg-[#E8F4F8] cursor-pointer rounded-xl transition group/item">
                     <MapPin size={20} className="text-yamo-teal mt-0.5 opacity-50 group-hover/item:opacity-100 transition" />
                     <div>
-                      {/* On affiche le nom principal */}
                       <p className="font-bold text-gray-900">{item.display_name.split(',')[0]}</p>
-                      {/* On affiche le reste de l'adresse en petit */}
                       <p className="text-xs text-gray-500 line-clamp-1">{item.display_name.split(',').slice(1).join(',')}</p>
                     </div>
                   </div>
@@ -126,8 +114,6 @@ function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderCl
     </div>
   );
 }
-// --- FIN DU COMPOSANT ---
-
 
 export default function Home() {
   const router = useRouter();
@@ -136,8 +122,13 @@ export default function Home() {
   const [destination, setDestination] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [passagers, setPassagers] = useState("1");
+  
   const [user, setUser] = useState<any>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // ÉTAT POUR LES TRAJETS EN TEMPS RÉEL
+  const [liveTrips, setLiveTrips] = useState<any[]>([]);
+  const [loadingTrips, setLoadingTrips] = useState(true);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -146,6 +137,26 @@ export default function Home() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
+
+    // --- RÉCUPÉRATION DES TRAJETS DEPUIS SUPABASE ---
+    const fetchLiveTrips = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { data, error } = await supabase
+        .from('trajets')
+        .select('*')
+        .gte('date_depart', today) // Uniquement les trajets à partir d'aujourd'hui
+        .order('date_depart', { ascending: true })
+        .limit(6); // On prend les 6 prochains
+
+      if (data && !error) {
+        setLiveTrips(data);
+      }
+      setLoadingTrips(false);
+    };
+
+    fetchLiveTrips();
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -154,13 +165,20 @@ export default function Home() {
       alert("Dites-nous où vous allez pour qu'on cherche vos chauffeurs !");
       return;
     }
-    router.push(`/recherche?depart=${depart}&destination=${destination}&date=${date}&passagers=${passagers}`);
+    router.push(`/recherche?depart=${encodeURIComponent(depart)}&destination=${encodeURIComponent(destination)}&date=${date}&passagers=${passagers}`);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setShowUserMenu(false);
     alert("À la prochaine sur Yamoh !");
+  };
+
+  // Fonction pour formater la date proprement
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "Date à préciser";
+    const options: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'short' };
+    return new Date(dateString).toLocaleDateString('fr-FR', options);
   };
 
   return (
@@ -196,7 +214,7 @@ export default function Home() {
         <div className="flex items-center gap-4">
           <Link href="/publier" className="hidden md:flex items-center gap-2 text-yamo-teal font-bold hover:bg-gray-50 px-4 py-2 rounded-full transition">
             <PlusCircle size={20} />
-            Publier un trajet
+            Proposer un trajet
           </Link>
 
           {user ? (
@@ -215,7 +233,7 @@ export default function Home() {
                 {showUserMenu && (
                   <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden py-2 animate-in fade-in zoom-in duration-150">
                     <Link href="/publier" className="px-6 py-3 hover:bg-gray-50 flex md:hidden items-center gap-3 text-yamo-teal font-black transition border-b border-gray-50" onClick={() => setShowUserMenu(false)}>
-                      <PlusCircle size={18} /> Publier un trajet
+                      <PlusCircle size={18} /> Proposer un trajet
                     </Link>
                     <Link href="/dashboard" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><Car size={18} /> Vos trajets</Link>
                     <Link href="/mes-trajets" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><Ticket size={18} /> Mes billets</Link>
@@ -257,7 +275,6 @@ export default function Home() {
 
         <div className="relative z-30 bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
           
-          {/* CHAMP DÉPART AVEC AUTO-COMPLÉTION */}
           <LocationAutocomplete 
             placeholder="Départ (ex: Angré)" 
             value={depart} 
@@ -266,7 +283,6 @@ export default function Home() {
             borderClass="border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 rounded-t-2xl md:rounded-l-full"
           />
 
-          {/* CHAMP DESTINATION AVEC AUTO-COMPLÉTION */}
           <LocationAutocomplete 
             placeholder="Destination (ex: Plateau)" 
             value={destination} 
@@ -291,47 +307,102 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- MEILLEURS PRIX --- */}
+      {/* --- TRAJETS EN TEMPS RÉEL (NOUVEAU) --- */}
       <section className="py-24 px-6 max-w-7xl mx-auto">
-        <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">Les trajets les plus demandés</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-          {[
-            { from: "Yopougon", to: "Plateau", price: "500", img: "/yop_plateau.jpg" },
-            { from: "Cocody", to: "Plateau", price: "500", img: "/cocody_plateau.jpg" },
-            { from: "Yopougon", to: "Cocody", price: "800", img: "/yop_cocody.jpg" }
-          ].map((item, index) => (
-            <div key={index} className="bg-white rounded-[2.5rem] overflow-hidden shadow-lg border border-gray-100 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group">
-              <div className="h-72 bg-gray-200 relative overflow-hidden">
-                <img 
-                  src={item.img} 
-                  className="h-full w-full object-cover group-hover:scale-110 transition duration-700" 
-                  alt={`${item.from} vers ${item.to}`}
-                  onError={(e: any) => { e.target.src = "https://images.unsplash.com/photo-1449034446853-66c86144b0ad?q=80&w=800" }} 
-                />
-              </div>
-              <div className="p-8">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 rounded-full border-2 border-yamo-teal"></div>
-                    <div className="w-[2px] h-6 bg-gray-200"></div>
-                    <div className="w-3 h-3 rounded-full border-2 border-yamo-orange"></div>
-                  </div>
-                  <div className="font-black text-2xl text-gray-800">
-                    <p>{item.from}</p>
-                    <p>{item.to}</p>
-                  </div>
-                </div>
-                <div className="flex justify-between items-end border-t border-gray-50 pt-6">
-                  <div>
-                    <p className="text-xs text-gray-400 font-black uppercase tracking-widest">À partir de</p>
-                    <p className="text-3xl font-black text-yamo-teal">{item.price} <span className="text-lg">FCFA</span></p>
-                  </div>
-                  <button className="bg-yamo-teal text-white p-4 rounded-full group-hover:bg-yamo-orange transition-all shadow-lg shadow-yamo-teal/20 group-hover:shadow-yamo-orange/20 group-hover:translate-x-1"><ArrowRight size={24}/></button>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-4">
+          <div>
+            <h2 className="text-4xl font-black text-gray-900 flex items-center gap-3">
+              Trajets disponibles
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
+              </span>
+            </h2>
+            <p className="text-gray-500 text-lg mt-2 font-medium">Réservez directement votre place avec nos chauffeurs.</p>
+          </div>
         </div>
+
+        {loadingTrips ? (
+          // SQUELETTE DE CHARGEMENT
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-gray-50 rounded-[2.5rem] h-64 animate-pulse border border-gray-100"></div>
+            ))}
+          </div>
+        ) : liveTrips.length > 0 ? (
+          // LISTE DES TRAJETS RÉELS
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {liveTrips.map((trip) => (
+              <div key={trip.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
+                
+                {/* En-tête : Date et Heure */}
+                <div className="flex justify-between items-center border-b border-gray-50 pb-4 mb-4">
+                  <div className="flex items-center gap-2 text-yamo-teal font-bold bg-yamo-teal/10 px-3 py-1.5 rounded-xl text-sm">
+                    <Calendar size={16} />
+                    <span className="capitalize">{formatDate(trip.date_depart)}</span>
+                  </div>
+                  {trip.heure_depart && (
+                    <div className="flex items-center gap-1.5 text-yamo-orange font-black">
+                      <Clock size={16} />
+                      {trip.heure_depart.substring(0, 5)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Corps : Départ / Arrivée */}
+                <div className="flex gap-4 mb-6 relative">
+                  <div className="flex flex-col items-center mt-1">
+                    <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
+                    <div className="w-0.5 h-10 bg-gray-200 my-1"></div>
+                    <div className="w-3.5 h-3.5 rounded-full border-[3px] border-yamo-orange"></div>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-900 text-lg mb-4 line-clamp-1">{trip.depart.split(',')[0]}</p>
+                    <p className="font-bold text-gray-900 text-lg line-clamp-1">{trip.destination.split(',')[0]}</p>
+                  </div>
+                </div>
+
+                {/* Footer : Chauffeur & Réservation */}
+                <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black">
+                      {trip.conducteur_nom ? trip.conducteur_nom.charAt(0).toUpperCase() : 'C'}
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-900 text-sm">{trip.conducteur_nom || "Conducteur"}</p>
+                      <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                        <Users size={12}/> {trip.places_disponibles} places
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col items-end">
+                    <p className="text-2xl font-black text-yamo-teal">{trip.prix} <span className="text-sm font-bold">FCFA</span></p>
+                    {/* Le bouton redirige vers la recherche pré-remplie pour commander */}
+                    <Link href={`/recherche?depart=${encodeURIComponent(trip.depart)}&destination=${encodeURIComponent(trip.destination)}&date=${trip.date_depart}&passagers=1`}>
+                      <button className="mt-2 text-sm bg-gray-50 text-yamo-teal font-bold px-4 py-2 rounded-xl group-hover:bg-yamo-teal group-hover:text-white transition">
+                        Réserver
+                      </button>
+                    </Link>
+                  </div>
+                </div>
+
+              </div>
+            ))}
+          </div>
+        ) : (
+          // MESSAGE SI AUCUN TRAJET
+          <div className="bg-[#E8F4F8] rounded-[3rem] p-12 text-center border border-yamo-teal/10">
+            <Car size={64} className="mx-auto text-yamo-teal opacity-50 mb-4" />
+            <h3 className="text-2xl font-black text-gray-900 mb-2">Soyez le premier à publier !</h3>
+            <p className="text-gray-600 text-lg mb-6">Il n'y a pas encore de trajet programmé aujourd'hui.</p>
+            <Link href="/publier">
+              <button className="bg-yamo-teal text-white font-bold px-8 py-4 rounded-full shadow-lg hover:bg-[#115566] transition">
+                Proposer mon trajet
+              </button>
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* --- CONFIANCE & CHOIX --- */}
