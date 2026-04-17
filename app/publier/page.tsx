@@ -1,10 +1,114 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Car, User, Coins } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Car, User, Coins, MapPin, History } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+
+// --- COMPOSANT D'AUTO-COMPLÉTION ADAPTÉ POUR LE FORMULAIRE ---
+function FormLocationAutocomplete({ placeholder, value, onChange, dotColor, focusColor }: any) {
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const savedHistory = JSON.parse(localStorage.getItem('yamoh_publish_history') || '[]');
+    setHistory(savedHistory);
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchSuggestions = async (query: string) => {
+    onChange(query);
+    if (query.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}, Abidjan, Côte d'Ivoire&limit=5`);
+      const data = await res.json();
+      setSuggestions(data);
+    } catch (error) {
+      console.error("Erreur de recherche d'adresse", error);
+    }
+    setLoading(false);
+  };
+
+  const handleSelect = (adresse: string) => {
+    onChange(adresse);
+    setShowDropdown(false);
+    const newHistory = [adresse, ...history.filter(h => h !== adresse)].slice(0, 5);
+    setHistory(newHistory);
+    localStorage.setItem('yamoh_publish_history', JSON.stringify(newHistory));
+  };
+
+  return (
+    <div className={`relative z-10 flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 transition focus-within:border-${focusColor}`} ref={wrapperRef}>
+      <div className={`w-4 h-4 rounded-full border-4 ${dotColor} bg-white flex-shrink-0`}></div>
+      <input 
+        type="text" 
+        required 
+        placeholder={placeholder} 
+        className="bg-transparent outline-none w-full text-lg font-bold text-gray-800 placeholder-gray-400" 
+        value={value} 
+        onChange={(e) => {
+          fetchSuggestions(e.target.value);
+          setShowDropdown(true);
+        }}
+        onFocus={() => setShowDropdown(true)}
+      />
+
+      {showDropdown && (value.length > 0 || history.length > 0) && (
+        <div className="absolute top-[110%] left-0 w-full mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+          {value.length === 0 && history.length > 0 && (
+            <div className="p-2">
+              <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Lieux récents</p>
+              {history.map((histItem, idx) => (
+                <div key={idx} onClick={() => handleSelect(histItem)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer rounded-xl transition">
+                  <History size={18} className="text-gray-400" />
+                  <span className="font-medium text-gray-700">{histItem}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {value.length >= 2 && (
+            <div className="p-2">
+              <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Suggestions</p>
+              {loading ? (
+                <div className="px-4 py-3 text-gray-500 font-medium text-sm italic">Recherche en cours...</div>
+              ) : suggestions.length > 0 ? (
+                suggestions.map((item, idx) => (
+                  <div key={idx} onClick={() => handleSelect(item.display_name.split(',')[0])} className="flex items-start gap-3 px-4 py-3 hover:bg-[#E8F4F8] cursor-pointer rounded-xl transition group/item">
+                    <MapPin size={20} className="text-yamo-teal mt-0.5 opacity-50 group-hover/item:opacity-100 transition flex-shrink-0" />
+                    <div>
+                      <p className="font-bold text-gray-900">{item.display_name.split(',')[0]}</p>
+                      <p className="text-xs text-gray-500 line-clamp-1">{item.display_name.split(',').slice(1).join(',')}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="px-4 py-3 text-gray-500 font-medium text-sm italic">Aucun lieu trouvé pour "{value}"</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function PublierTrajet() {
   const router = useRouter();
@@ -21,11 +125,31 @@ export default function PublierTrajet() {
   const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.push('/connexion'); 
       } else {
         setUser(session.user);
+        
+        // RECUPERATION DES DONNEES DU VEHICULE DEPUIS LE PROFIL
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('vehicule_marque, vehicule_couleur, vehicule_plaque')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileData && !profileError) {
+          // On assemble les informations si elles existent (Ex: "Toyota Corolla - Gris - 1234 AB 01")
+          const infosVehicule = [
+            profileData.vehicule_marque, 
+            profileData.vehicule_couleur, 
+            profileData.vehicule_plaque
+          ].filter(Boolean).join(" - ");
+
+          if (infosVehicule) {
+            setVehicule(infosVehicule);
+          }
+        }
       }
       setAuthChecking(false);
     });
@@ -45,7 +169,7 @@ export default function PublierTrajet() {
           places_disponibles: parseInt(places),
           conducteur_nom: user?.user_metadata?.full_name || "Conducteur",
           vehicule: vehicule,
-          user_id: user?.id // LIEN CRUCIAL : On enregistre qui a publié le trajet
+          user_id: user?.id
         }
       ]);
 
@@ -86,27 +210,36 @@ export default function PublierTrajet() {
         <form onSubmit={handleSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-6">
           
           <div className="bg-yamo-teal/5 p-4 rounded-2xl flex items-center gap-3">
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-yamo-teal/20">
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-yamo-teal/20 shadow-sm">
                <User size={20} className="text-yamo-teal" />
             </div>
             <p className="font-bold text-yamo-teal">Publication en tant que : {user?.user_metadata?.full_name}</p>
           </div>
 
           <div className="flex flex-col gap-4 relative">
-            <div className="absolute left-[1.1rem] top-8 bottom-8 w-1 bg-gray-100 z-0"></div>
-            <div className="relative z-10 flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 focus-within:border-yamo-teal transition">
-              <div className="w-4 h-4 rounded-full border-4 border-gray-300 bg-white"></div>
-              <input type="text" required placeholder="Départ" className="bg-transparent outline-none w-full text-lg font-bold text-gray-800" value={depart} onChange={(e) => setDepart(e.target.value)} />
-            </div>
-            <div className="relative z-10 flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 focus-within:border-yamo-orange transition">
-              <div className="w-4 h-4 rounded-full border-4 border-yamo-orange bg-white"></div>
-              <input type="text" required placeholder="Arrivée" className="bg-transparent outline-none w-full text-lg font-bold text-gray-800" value={destination} onChange={(e) => setDestination(e.target.value)} />
-            </div>
+            <div className="absolute left-[1.35rem] top-10 bottom-10 w-1 bg-gray-100 z-0"></div>
+            
+            <FormLocationAutocomplete 
+              placeholder="Départ (ex: Riviera Palmeraie)"
+              value={depart}
+              onChange={setDepart}
+              dotColor="border-gray-300"
+              focusColor="yamo-teal"
+            />
+
+            <FormLocationAutocomplete 
+              placeholder="Arrivée (ex: Plateau)"
+              value={destination}
+              onChange={setDestination}
+              dotColor="border-yamo-orange"
+              focusColor="yamo-orange"
+            />
           </div>
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2"><Car size={16}/> Votre Véhicule</label>
             <input type="text" required placeholder="Ex: Toyota Corolla (Climatisé)" className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-medium" value={vehicule} onChange={(e) => setVehicule(e.target.value)} />
+            <p className="text-xs text-gray-400">Rempli automatiquement avec vos informations de profil.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -116,7 +249,7 @@ export default function PublierTrajet() {
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-black text-gray-500 uppercase flex items-center gap-2"><User size={16}/> Places</label>
-              <select className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-bold" value={places} onChange={(e) => setPlaces(e.target.value)}>
+              <select className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-bold appearance-none" value={places} onChange={(e) => setPlaces(e.target.value)}>
                 <option value="1">1</option>
                 <option value="2">2</option>
                 <option value="3">3</option>
