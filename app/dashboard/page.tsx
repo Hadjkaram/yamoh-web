@@ -26,7 +26,7 @@ export default function DashboardConducteur() {
   const [ratingModal, setRatingModal] = useState<any>(null);
   const [passengerModal, setPassengerModal] = useState<any>(null); 
   
-  // NOUVEAU : MODAL DE CONFIRMATION DESIGN
+  // MODAL DE CONFIRMATION DESIGN
   const [confirmDialog, setConfirmDialog] = useState<{titre: string, message: string, actionTexte: string, onConfirm: () => void} | null>(null);
 
   // ÉTATS POUR LA NOTATION
@@ -92,17 +92,14 @@ export default function DashboardConducteur() {
       onConfirm: async () => {
         setConfirmDialog(null);
         
-        // 1. Suppression
         await supabase.from('reservations').delete().eq('id', resa.id);
 
-        // 2. Restitution des places
         const placesRendues = resa.places_reservees || 1;
         await supabase
           .from('trajets')
           .update({ places_disponibles: trajet.places_disponibles + placesRendues })
           .eq('id', trajet.id);
 
-        // 3. Notification au passager
         if (resa.passager_id) {
           await supabase.from('notifications').insert([{
             user_id: resa.passager_id,
@@ -145,9 +142,8 @@ export default function DashboardConducteur() {
     setIsScanning(false);
   };
 
-  // --- LA MAGIE OPÈRE ICI : PRÉLÈVEMENT AUTOMATIQUE ---
+  // --- LA MAGIE : PRÉLÈVEMENT AUTOMATIQUE + FIX TYPESCRIPT ---
   const validerBillet = async (reservationId: string) => {
-    // 1. On récupère la réservation ET le prix du trajet
     const { data, error } = await supabase
       .from('reservations')
       .select('id, statut, passager_nom, trajet_id, places_reservees, trajets(prix)')
@@ -157,13 +153,13 @@ export default function DashboardConducteur() {
     if (error || !data) { alert("❌ QR Code invalide."); return; }
     if (data.statut === 'valide') { alert(`⚠️ Billet déjà validé pour ${data.passager_nom} !`); return; }
 
-    // 2. Calculs Financiers
-    const prixUnitaire = data.trajets?.prix || 0;
+    // Correction TypeScript pour la relation relation trajets (objet ou tableau)
+    const trajetsData = data.trajets as any;
+    const prixUnitaire = Array.isArray(trajetsData) ? trajetsData[0]?.prix : trajetsData?.prix;
     const places = data.places_reservees || 1;
-    const prixTotal = prixUnitaire * places;
+    const prixTotal = (prixUnitaire || 0) * places;
     const commissionYamoh = prixTotal * 0.10; // Yamoh prend 10%
 
-    // 3. Récupérer le solde actuel du chauffeur
     const { data: profile } = await supabase
       .from('profiles')
       .select('solde_wallet')
@@ -172,13 +168,12 @@ export default function DashboardConducteur() {
       
     const soldeActuel = profile?.solde_wallet || 0;
 
-    // 4. On passe le billet en "Valide"
     await supabase.from('reservations').update({ statut: 'valide' }).eq('id', reservationId);
 
-    // 5. On prélève la commission du Wallet
+    // Mise à jour du Wallet
     await supabase.from('profiles').update({ solde_wallet: soldeActuel - commissionYamoh }).eq('id', user.id);
 
-    // 6. On crée la facture dans l'historique pour la transparence
+    // Historique de transaction
     await supabase.from('paiements').insert([{
       user_id: user.id,
       montant: commissionYamoh,
@@ -187,7 +182,6 @@ export default function DashboardConducteur() {
       libelle: `Commission (10%) - ${data.passager_nom}`
     }]);
 
-    // 7. On rafraîchit l'écran et on note le client
     fetchDashboardData();
     setRatingModal({ ...data, titre: `Billet validé pour ${data.passager_nom} !` });
   };
@@ -235,18 +229,11 @@ export default function DashboardConducteur() {
       </header>
 
       <div className="p-4 md:p-8 max-w-4xl mx-auto w-full">
-        
         <div className="flex bg-white p-1 rounded-2xl mb-8 shadow-sm border border-gray-100">
-          <button 
-            onClick={() => setActiveTab("en_cours")} 
-            className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "en_cours" ? 'bg-yamo-orange text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-          >
+          <button onClick={() => setActiveTab("en_cours")} className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "en_cours" ? 'bg-yamo-orange text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
             <Car size={18}/> À venir ({trajetsEnCours.length})
           </button>
-          <button 
-            onClick={() => setActiveTab("historique")} 
-            className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "historique" ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-          >
+          <button onClick={() => setActiveTab("historique")} className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "historique" ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
             <History size={18}/> Historique
           </button>
         </div>
@@ -277,52 +264,27 @@ export default function DashboardConducteur() {
                     <Trash2 size={20} />
                   </button>
                 )}
-
                 <div className="flex justify-between items-start mb-4 pr-10">
                   <div className="flex flex-col gap-1">
                     <p className="font-black text-xl text-gray-900">{annonce.depart?.split(',')[0]} → {annonce.destination?.split(',')[0]}</p>
                     <p className="text-gray-500 text-sm font-medium">{new Date(annonce.date_depart).toLocaleDateString('fr-FR')} • {annonce.vehicule}</p>
                   </div>
                 </div>
-                
                 <hr className="border-gray-100 my-4" />
-
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-sm uppercase tracking-wider">
-                      <Users size={16} /> Passagers ({annonce.reservations?.length || 0})
-                    </h3>
+                    <h3 className="font-bold text-gray-700 flex items-center gap-2 text-sm uppercase tracking-wider"><Users size={16} /> Passagers ({annonce.reservations?.length || 0})</h3>
                     <p className="text-xs font-bold text-yamo-teal bg-yamo-teal/10 px-3 py-1 rounded-full">{annonce.places_disponibles} place(s) dispo</p>
                   </div>
-
                   <div className="flex flex-col gap-3">
-                    {annonce.reservations?.length === 0 && (
-                      <p className="text-sm text-gray-400 italic">Personne n'a encore réservé.</p>
-                    )}
+                    {annonce.reservations?.length === 0 && <p className="text-sm text-gray-400 italic">Personne n'a encore réservé.</p>}
                     {annonce.reservations?.map((resa: any) => (
-                      <div 
-                        key={resa.id} 
-                        onClick={() => setPassengerModal({ resa, trajet: annonce })}
-                        className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 hover:border-yamo-teal cursor-pointer transition group"
-                      >
+                      <div key={resa.id} onClick={() => setPassengerModal({ resa, trajet: annonce })} className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 hover:border-yamo-teal cursor-pointer transition group">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center font-bold text-yamo-teal text-xs border border-gray-200 group-hover:bg-yamo-teal group-hover:text-white transition">
-                            {resa.passager_nom.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-bold text-gray-900 text-sm leading-none">{resa.passager_nom}</p>
-                            <p className="text-xs text-gray-500 mt-1">{resa.places_reservees || 1} place(s)</p>
-                          </div>
+                          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center font-bold text-yamo-teal text-xs border border-gray-200 group-hover:bg-yamo-teal group-hover:text-white transition">{resa.passager_nom.charAt(0).toUpperCase()}</div>
+                          <div><p className="font-bold text-gray-900 text-sm leading-none">{resa.passager_nom}</p><p className="text-xs text-gray-500 mt-1">{resa.places_reservees || 1} place(s)</p></div>
                         </div>
-                        {resa.statut === 'valide' ? (
-                          <span className="text-green-500 bg-green-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-green-100">
-                            <CheckCircle size={14} /> Embarqué
-                          </span>
-                        ) : (
-                          <span className="text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-orange-100">
-                            <Clock size={14} /> En attente
-                          </span>
-                        )}
+                        {resa.statut === 'valide' ? <span className="text-green-500 bg-green-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-green-100"><CheckCircle size={14} /> Embarqué</span> : <span className="text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-orange-100"><Clock size={14} /> En attente</span>}
                       </div>
                     ))}
                   </div>
@@ -333,71 +295,35 @@ export default function DashboardConducteur() {
         </div>
       </div>
 
-      {/* --- LE MODAL DE GESTION DU PASSAGER --- */}
       {passengerModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-md relative animate-in zoom-in duration-300">
-            <button onClick={() => setPassengerModal(null)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition">
-              <X size={20} />
-            </button>
-            
-            <div className="w-20 h-20 bg-yamo-teal/10 text-yamo-teal rounded-full flex items-center justify-center mb-4 font-black text-3xl">
-              {passengerModal.resa.passager_nom.charAt(0).toUpperCase()}
-            </div>
-            
+            <button onClick={() => setPassengerModal(null)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20} /></button>
+            <div className="w-20 h-20 bg-yamo-teal/10 text-yamo-teal rounded-full flex items-center justify-center mb-4 font-black text-3xl">{passengerModal.resa.passager_nom.charAt(0).toUpperCase()}</div>
             <h2 className="text-2xl font-black text-gray-900 text-center mb-1">{passengerModal.resa.passager_nom}</h2>
-            <p className="text-gray-500 text-sm mb-6 text-center">
-              Réservation pour {passengerModal.resa.places_reservees || 1} place(s)<br/>
-              Statut : {passengerModal.resa.statut === 'valide' ? 'Déjà scanné ✅' : 'En attente ⏳'}
-            </p>
-
+            <p className="text-gray-500 text-sm mb-6 text-center">Réservation pour {passengerModal.resa.places_reservees || 1} place(s)<br/>Statut : {passengerModal.resa.statut === 'valide' ? 'Déjà scanné ✅' : 'En attente ⏳'}</p>
             <div className="w-full flex flex-col gap-3">
-              <button className="w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
-                <Phone size={20} /> Appeler le passager
-              </button>
-
-              {passengerModal.resa.statut !== 'valide' && (
-                <button 
-                  onClick={() => handleRefuserPassager(passengerModal.resa, passengerModal.trajet)}
-                  className="w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 mt-4"
-                >
-                  <UserMinus size={20} /> Refuser / Annuler
-                </button>
-              )}
+              <button className="w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 bg-gray-100 text-gray-600 hover:bg-gray-200 transition"><Phone size={20} /> Appeler le passager</button>
+              {passengerModal.resa.statut !== 'valide' && <button onClick={() => handleRefuserPassager(passengerModal.resa, passengerModal.trajet)} className="w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 mt-4"><UserMinus size={20} /> Refuser / Annuler</button>}
             </div>
           </div>
         </div>
       )}
 
-      {/* --- LE NOUVEAU MODAL DE CONFIRMATION DESIGN --- */}
       {confirmDialog && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-sm relative animate-in zoom-in duration-200">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
-              <AlertCircle size={40} />
-            </div>
+            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4"><AlertCircle size={40} /></div>
             <h2 className="text-2xl font-black text-gray-900 text-center mb-2">{confirmDialog.titre}</h2>
             <p className="text-gray-500 text-sm mb-8 text-center leading-relaxed">{confirmDialog.message}</p>
-            
             <div className="w-full flex gap-3">
-              <button 
-                onClick={() => setConfirmDialog(null)} 
-                className="flex-1 py-4 font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-2xl transition"
-              >
-                Annuler
-              </button>
-              <button 
-                onClick={confirmDialog.onConfirm} 
-                className="flex-1 py-4 font-bold text-white bg-red-500 hover:bg-red-600 rounded-2xl transition shadow-lg shadow-red-500/20"
-              >
-                {confirmDialog.actionTexte}
-              </button>
+              <button onClick={() => setConfirmDialog(null)} className="flex-1 py-4 font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-2xl transition">Annuler</button>
+              <button onClick={confirmDialog.onConfirm} className="flex-1 py-4 font-bold text-white bg-red-500 hover:bg-red-600 rounded-2xl transition shadow-lg shadow-red-500/20">{confirmDialog.actionTexte}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- LE MODAL DE NOTATION --- */}
       {ratingModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-md relative animate-in zoom-in duration-300">
@@ -405,7 +331,6 @@ export default function DashboardConducteur() {
             <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-4 shadow-inner"><CheckCircle2 size={40} /></div>
             <h2 className="text-2xl font-black text-gray-900 text-center mb-1">{ratingModal.titre}</h2>
             <p className="text-gray-500 text-sm mb-6 text-center">Le passager est à bord. Comment s'est passé le contact ?</p>
-            
             <div className="flex items-center gap-2 mb-6">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button key={star} onMouseEnter={() => setHoveredRating(star)} onMouseLeave={() => setHoveredRating(0)} onClick={() => setRating(star)} className="p-1 transition-transform hover:scale-110">
@@ -413,23 +338,15 @@ export default function DashboardConducteur() {
                 </button>
               ))}
             </div>
-
             <div className="flex flex-wrap justify-center gap-2 mb-6">
-              {TAGS_PASSAGER.map(tag => (
-                <button key={tag} onClick={() => toggleTag(tag)} className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 border-2 ${selectedTags.includes(tag) ? 'bg-yamo-teal text-white border-yamo-teal' : 'bg-gray-50 text-gray-500 border-gray-100 hover:border-gray-200'}`}>{tag}</button>
-              ))}
+              {TAGS_PASSAGER.map(tag => <button key={tag} onClick={() => toggleTag(tag)} className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 border-2 ${selectedTags.includes(tag) ? 'bg-yamo-teal text-white border-yamo-teal' : 'bg-gray-50 text-gray-500 border-gray-100 hover:border-gray-200'}`}>{tag}</button>)}
             </div>
-
             <textarea placeholder="Un petit mot ? (Optionnel)" value={comment} onChange={(e) => setComment(e.target.value)} className="w-full bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal mb-6 font-medium text-sm resize-none" rows={3}></textarea>
-
-            <button onClick={handleRatingSubmit} disabled={isSubmittingRating || rating === 0} className={`w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 ${rating === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-yamo-teal text-white hover:bg-[#115566] shadow-lg shadow-yamo-teal/20'}`}>
-              {isSubmittingRating ? "Envoi..." : "Valider l'évaluation"}
-            </button>
+            <button onClick={handleRatingSubmit} disabled={isSubmittingRating || rating === 0} className={`w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 ${rating === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-yamo-teal text-white hover:bg-[#115566] shadow-lg shadow-yamo-teal/20'}`}>{isSubmittingRating ? "Envoi..." : "Valider l'évaluation"}</button>
           </div>
         </div>
       )}
 
-      {/* MODAL DU SCANNER */}
       {isScanning && (
         <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-6 backdrop-blur-sm">
           <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden relative">
