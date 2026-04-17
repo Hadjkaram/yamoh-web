@@ -19,26 +19,36 @@ export default function MessagesPage() {
       if (!session) return;
       setUserId(session.user.id);
 
-      // Charger les conversations
-      const { data, error } = await supabase
+      // 1. ASTUCE INFAILLIBLE : On charge les conversations sans faire planter Supabase
+      const { data: convData, error } = await supabase
         .from('conversations')
-        .select(`
-          *,
-          trajets (depart, destination),
-          passager:passager_id (full_name),
-          conducteur:conducteur_id (full_name)
-        `)
+        .select('*')
         .or(`passager_id.eq.${session.user.id},conducteur_id.eq.${session.user.id}`)
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error("Erreur de chargement des conversations :", error.message);
+        console.error("Erreur de chargement :", error.message);
+        return;
       }
 
-      if (data && data.length > 0) {
-        setConversations(data);
-        // L'ASTUCE UX : On ouvre automatiquement la discussion la plus récente !
-        setSelectedConv(data[0]); 
+      if (convData && convData.length > 0) {
+        // 2. On récupère les trajets et les profils manuellement en JavaScript
+        const trajetIds = [...new Set(convData.map(c => c.trajet_id).filter(Boolean))];
+        const userIds = [...new Set(convData.flatMap(c => [c.passager_id, c.conducteur_id]).filter(Boolean))];
+
+        const { data: trajetsData } = await supabase.from('trajets').select('*').in('id', trajetIds);
+        const { data: profilesData } = await supabase.from('profiles').select('*').in('id', userIds);
+
+        const mergedConversations = convData.map(conv => ({
+          ...conv,
+          trajets: trajetsData?.find(t => t.id === conv.trajet_id) || {},
+          passager: profilesData?.find(p => p.id === conv.passager_id) || {},
+          conducteur: profilesData?.find(p => p.id === conv.conducteur_id) || {}
+        }));
+
+        setConversations(mergedConversations);
+        // 3. OUVRE DIRECTEMENT LA DERNIÈRE CONVERSATION POUR AFFICHER LA ZONE DE TEXTE
+        setSelectedConv(mergedConversations[0]);
       }
     }
     init();
@@ -83,7 +93,7 @@ export default function MessagesPage() {
     if (!newMessage.trim() || !userId || !selectedConv) return;
 
     const messageToSend = newMessage;
-    setNewMessage(""); // Vider le champ immédiatement pour l'UX
+    setNewMessage(""); // Vider le champ immédiatement pour la rapidité
 
     const { error } = await supabase.from('messages').insert([{
       conversation_id: selectedConv.id,
@@ -92,7 +102,7 @@ export default function MessagesPage() {
     }]);
 
     if (error) {
-      alert("Erreur d'envoi : " + error.message);
+      alert("Erreur d'envoi du message : " + error.message);
       setNewMessage(messageToSend);
     }
   };
@@ -109,7 +119,7 @@ export default function MessagesPage() {
         
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 ? (
-            <div className="p-10 text-center text-gray-400">Aucune discussion en cours</div>
+            <div className="p-10 text-center text-gray-400 font-bold">Aucune discussion en cours</div>
           ) : (
             conversations.map(conv => (
               <div 
@@ -118,10 +128,10 @@ export default function MessagesPage() {
                 className={`p-6 border-b border-gray-50 cursor-pointer transition ${selectedConv?.id === conv.id ? 'bg-yamo-teal/5 border-l-4 border-l-yamo-teal' : 'hover:bg-gray-50'}`}
               >
                 <div className="flex justify-between items-center mb-1">
-                  <p className="font-black text-gray-900">{conv.trajets?.depart?.split(',')[0]} → {conv.trajets?.destination?.split(',')[0]}</p>
+                  <p className="font-black text-gray-900 line-clamp-1">{conv.trajets?.depart?.split(',')[0]} → {conv.trajets?.destination?.split(',')[0]}</p>
                 </div>
-                <p className="text-sm text-gray-500 truncate">
-                  {userId === conv.conducteur_id ? `Passager : ${conv.passager?.full_name}` : `Conducteur : ${conv.conducteur?.full_name}`}
+                <p className="text-sm text-gray-500 truncate font-medium">
+                  {userId === conv.conducteur_id ? `Passager : ${conv.passager?.full_name || 'Inconnu'}` : `Conducteur : ${conv.conducteur?.full_name || 'Inconnu'}`}
                 </p>
               </div>
             ))
@@ -150,7 +160,7 @@ export default function MessagesPage() {
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {messages.length === 0 ? (
-                <div className="text-center text-gray-400 mt-10 font-medium">Envoyez le premier message !</div>
+                <div className="text-center text-gray-400 mt-10 font-medium">Dites bonjour ! 👋</div>
               ) : (
                 messages.map((m, i) => (
                   <div key={i} className={`flex ${m.sender_id === userId ? 'justify-end' : 'justify-start'}`}>
@@ -167,7 +177,7 @@ export default function MessagesPage() {
               <div ref={scrollRef} />
             </div>
 
-            {/* LA FAMEUSE ZONE DE TEXTE EST ICI */}
+            {/* LA FAMEUSE ZONE DE TEXTE ET LE BOUTON D'ENVOI SONT LÀ */}
             <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-100 flex gap-2 items-center shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
               <input 
                 value={newMessage}
