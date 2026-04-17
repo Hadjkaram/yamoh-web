@@ -4,43 +4,46 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   LayoutDashboard, ShieldCheck, Users, Map, Wallet, Settings, 
-  Search, CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2 
+  Search, CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
+  Clock, CheckCircle2, Ban, MoreVertical
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function ERPAdmin() {
   const router = useRouter();
   const [activeMenu, setActiveMenu] = useState("kyc");
-  const [loading, setLoading] = useState(true);
+  const [globalSearch, setGlobalSearch] = useState("");
   
-  // Données KYC
+  // --- ÉTATS KYC ---
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+  const [loadingKyc, setLoadingKyc] = useState(true);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [userDocs, setUserDocs] = useState<{recto?: string, verso?: string, selfie?: string} | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
+  // --- ÉTATS UTILISATEURS ---
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  // --- CHARGEMENT DYNAMIQUE SELON LE MENU ---
   useEffect(() => {
-    fetchPendingKYC();
-  }, []);
+    if (activeMenu === "kyc") fetchPendingKYC();
+    if (activeMenu === "users") fetchAllUsers();
+  }, [activeMenu]);
 
+  // ==========================================
+  // LOGIQUE KYC (Inchangée)
+  // ==========================================
   const fetchPendingKYC = async () => {
-    setLoading(true);
-    // On récupère les profils en attente de vérification
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('verification_status', 'en_attente')
-      .order('created_at', { ascending: false });
-
+    setLoadingKyc(true);
+    const { data } = await supabase.from('profiles').select('*').eq('verification_status', 'en_attente').order('created_at', { ascending: false });
     if (data) setPendingUsers(data);
-    setLoading(false);
+    setLoadingKyc(false);
   };
 
-  // Charger les documents du dossier Supabase Storage de l'utilisateur
   const loadUserDocuments = async (userId: string) => {
     setLoadingDocs(true);
     const { data: files, error } = await supabase.storage.from('kyc_documents').list(userId);
-    
     if (files && !error) {
       let docs: any = {};
       files.forEach(file => {
@@ -65,22 +68,44 @@ export default function ERPAdmin() {
     const confirm = window.confirm(`Voulez-vous vraiment ${action === 'verifie' ? 'VALIDER' : 'REJETER'} ce profil ?`);
     if (!confirm) return;
 
-    // 1. MAJ du statut
     await supabase.from('profiles').update({ verification_status: action }).eq('id', userId);
-
-    // 2. Notification à l'utilisateur
     await supabase.from('notifications').insert([{
       user_id: userId,
       titre: action === 'verifie' ? "Identité Validée ✅" : "Identité Rejetée ❌",
-      message: action === 'verifie' 
-        ? "Super ! Votre compte est maintenant vérifié à 100%. Bon voyage sur Yamoh !" 
-        : "Vos documents n'ont pas pu être validés. Veuillez recommencer la vérification avec des photos claires.",
+      message: action === 'verifie' ? "Super ! Votre compte est maintenant vérifié à 100%. Bon voyage sur Yamoh !" : "Vos documents n'ont pas pu être validés. Veuillez recommencer.",
       type: 'systeme'
     }]);
 
     alert(`Profil ${action === 'verifie' ? 'validé' : 'rejeté'} avec succès.`);
     setSelectedUser(null);
-    fetchPendingKYC(); // Rafraîchir la liste
+    fetchPendingKYC(); 
+  };
+
+  // ==========================================
+  // LOGIQUE UTILISATEURS (NOUVEAU)
+  // ==========================================
+  const fetchAllUsers = async () => {
+    setLoadingUsers(true);
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    if (data) setAllUsers(data);
+    setLoadingUsers(false);
+  };
+
+  // Filtrage local pour la barre de recherche
+  const filteredUsers = allUsers.filter(u => 
+    u.full_name?.toLowerCase().includes(globalSearch.toLowerCase()) || 
+    u.phone?.includes(globalSearch)
+  );
+
+  // ==========================================
+  // INTERFACE ERP
+  // ==========================================
+  const menuTitles: any = {
+    dashboard: { title: "Vue d'ensemble", desc: "Statistiques globales de Yamoh." },
+    kyc: { title: "Centre de Vérification KYC", desc: "Validez les documents d'identité pour sécuriser la plateforme." },
+    live: { title: "Trajets en direct", desc: "Suivez l'activité des covoiturages d'aujourd'hui." },
+    users: { title: "Base Utilisateurs", desc: "Gérez tous les membres inscrits sur Yamoh." },
+    compta: { title: "Comptabilité & Finances", desc: "Suivi des revenus, commissions et paiements." }
   };
 
   return (
@@ -94,7 +119,7 @@ export default function ERPAdmin() {
         
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <MenuBtn icon={<LayoutDashboard size={20}/>} label="Vue d'ensemble" active={activeMenu === "dashboard"} onClick={() => setActiveMenu("dashboard")} />
-          <MenuBtn icon={<ShieldCheck size={20}/>} label="Vérifications (KYC)" badge={pendingUsers.length} active={activeMenu === "kyc"} onClick={() => setActiveMenu("kyc")} />
+          <MenuBtn icon={<ShieldCheck size={20}/>} label="Vérifications (KYC)" badge={activeMenu === "kyc" ? pendingUsers.length : undefined} active={activeMenu === "kyc"} onClick={() => setActiveMenu("kyc")} />
           <MenuBtn icon={<Map size={20}/>} label="Trajets en direct" active={activeMenu === "live"} onClick={() => setActiveMenu("live")} />
           <MenuBtn icon={<Users size={20}/>} label="Utilisateurs" active={activeMenu === "users"} onClick={() => setActiveMenu("users")} />
           <MenuBtn icon={<Wallet size={20}/>} label="Comptabilité" active={activeMenu === "compta"} onClick={() => setActiveMenu("compta")} />
@@ -110,63 +135,165 @@ export default function ERPAdmin() {
       {/* CONTENU PRINCIPAL */}
       <main className="flex-1 md:ml-64 p-8">
         
+        {/* HEADER DYNAMIQUE */}
         <header className="flex justify-between items-center mb-10">
           <div>
-            <h2 className="text-3xl font-black text-gray-900">Centre de Vérification KYC</h2>
-            <p className="text-gray-500 font-medium mt-1">Validez les documents d'identité pour sécuriser la plateforme.</p>
+            <h2 className="text-3xl font-black text-gray-900">{menuTitles[activeMenu]?.title || "Chargement..."}</h2>
+            <p className="text-gray-500 font-medium mt-1">{menuTitles[activeMenu]?.desc}</p>
           </div>
           <div className="relative">
             <Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
-            <input type="text" placeholder="Rechercher un nom..." className="pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-full shadow-sm outline-none focus:border-yamo-teal w-64" />
+            <input 
+              type="text" 
+              placeholder="Rechercher un nom ou numéro..." 
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              className="pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-full shadow-sm outline-none focus:border-yamo-teal w-72 transition-all focus:w-96" 
+            />
           </div>
         </header>
 
-        {/* LISTE DES UTILISATEURS EN ATTENTE */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div>
-        ) : pendingUsers.length === 0 ? (
-          <div className="bg-white p-16 rounded-[2rem] text-center border border-gray-100 shadow-sm">
-            <ShieldCheck size={64} className="mx-auto text-green-500 mb-4 opacity-50" />
-            <h3 className="text-2xl font-black text-gray-900">Tout est propre !</h3>
-            <p className="text-gray-500">Aucun profil en attente de validation.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pendingUsers.map(user => (
-              <div key={user.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md transition flex flex-col">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-14 h-14 bg-[#E8F4F8] text-yamo-teal font-black text-xl rounded-full flex items-center justify-center">
-                    {user.full_name?.charAt(0).toUpperCase()}
+        {/* ----------------------------------------------------- */}
+        {/* MODULE 1 : VÉRIFICATION KYC                           */}
+        {/* ----------------------------------------------------- */}
+        {activeMenu === "kyc" && (
+          loadingKyc ? (
+            <div className="flex items-center justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div>
+          ) : pendingUsers.length === 0 ? (
+            <div className="bg-white p-16 rounded-[2rem] text-center border border-gray-100 shadow-sm">
+              <ShieldCheck size={64} className="mx-auto text-green-500 mb-4 opacity-50" />
+              <h3 className="text-2xl font-black text-gray-900">Tout est propre !</h3>
+              <p className="text-gray-500">Aucun profil en attente de validation.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {pendingUsers.map(user => (
+                <div key={user.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md transition flex flex-col">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-14 h-14 bg-[#E8F4F8] text-yamo-teal font-black text-xl rounded-full flex items-center justify-center">
+                      {user.full_name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="font-black text-lg text-gray-900 leading-tight">{user.full_name}</h4>
+                      <p className="text-sm font-bold text-gray-400 uppercase tracking-wide">{user.role}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-black text-lg text-gray-900 leading-tight">{user.full_name}</h4>
-                    <p className="text-sm font-bold text-gray-400 uppercase tracking-wide">{user.role}</p>
+                  
+                  <div className="bg-orange-50 text-orange-600 px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-between mb-6">
+                    <span>Document : {user.kyc_doc_type?.toUpperCase() || 'Inconnu'}</span>
+                    <AlertTriangle size={16} />
                   </div>
-                </div>
-                
-                <div className="bg-orange-50 text-orange-600 px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-between mb-6">
-                  <span>Document : {user.kyc_doc_type?.toUpperCase() || 'Inconnu'}</span>
-                  <AlertTriangle size={16} />
-                </div>
 
-                <button 
-                  onClick={() => openUserModal(user)}
-                  className="mt-auto w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition flex items-center justify-center gap-2"
-                >
-                  <Eye size={18} /> Examiner les documents
-                </button>
+                  <button 
+                    onClick={() => openUserModal(user)}
+                    className="mt-auto w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition flex items-center justify-center gap-2"
+                  >
+                    <Eye size={18} /> Examiner les documents
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {/* ----------------------------------------------------- */}
+        {/* MODULE 2 : BASE UTILISATEURS (LE NOUVEAU !)           */}
+        {/* ----------------------------------------------------- */}
+        {activeMenu === "users" && (
+          loadingUsers ? (
+            <div className="flex items-center justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div>
+          ) : (
+            <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden animate-in fade-in duration-300">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
+                      <th className="p-6">Utilisateur</th>
+                      <th className="p-6">Rôle</th>
+                      <th className="p-6">Contact</th>
+                      <th className="p-6">Statut KYC</th>
+                      <th className="p-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredUsers.length === 0 ? (
+                      <tr><td colSpan={5} className="p-10 text-center text-gray-400 font-bold">Aucun utilisateur trouvé.</td></tr>
+                    ) : (
+                      filteredUsers.map(u => (
+                        <tr key={u.id} className="hover:bg-gray-50/50 transition">
+                          <td className="p-6">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-yamo-teal/10 text-yamo-teal font-black rounded-full flex items-center justify-center flex-shrink-0">
+                                {u.full_name?.charAt(0).toUpperCase() || '?'}
+                              </div>
+                              <div>
+                                <p className="font-bold text-gray-900">{u.full_name || 'Inconnu'}</p>
+                                <p className="text-xs text-gray-400">Inscrit le {new Date(u.created_at).toLocaleDateString('fr-FR')}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-6">
+                            <span className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider ${u.role === 'chauffeur' ? 'bg-yamo-orange/10 text-yamo-orange' : 'bg-[#E8F4F8] text-yamo-teal'}`}>
+                              {u.role || 'Passager'}
+                            </span>
+                          </td>
+                          <td className="p-6">
+                            <p className="font-medium text-gray-900">{u.phone || 'Non renseigné'}</p>
+                          </td>
+                          <td className="p-6">
+                            {u.verification_status === 'verifie' ? (
+                              <span className="flex items-center gap-1.5 text-green-600 font-bold text-sm"><CheckCircle2 size={16}/> Vérifié</span>
+                            ) : u.verification_status === 'en_attente' ? (
+                              <span className="flex items-center gap-1.5 text-orange-500 font-bold text-sm"><Clock size={16}/> En attente</span>
+                            ) : u.verification_status === 'rejete' ? (
+                              <span className="flex items-center gap-1.5 text-red-500 font-bold text-sm"><Ban size={16}/> Rejeté</span>
+                            ) : (
+                              <span className="flex items-center gap-1.5 text-gray-400 font-bold text-sm"><ShieldCheck size={16}/> Non initié</span>
+                            )}
+                          </td>
+                          <td className="p-6 text-right">
+                            <button className="p-2 text-gray-400 hover:text-yamo-teal hover:bg-yamo-teal/10 rounded-xl transition" title="Gérer l'utilisateur (À venir)">
+                              <MoreVertical size={20} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            </div>
+          )
+        )}
+
+        {/* ----------------------------------------------------- */}
+        {/* MODULE 3 : TRAJETS EN DIRECT (PLACEHOLDER)            */}
+        {/* ----------------------------------------------------- */}
+        {activeMenu === "live" && (
+          <div className="bg-white p-16 rounded-[2.5rem] text-center border border-gray-100 shadow-sm animate-in fade-in duration-300">
+            <Map size={64} className="mx-auto text-gray-200 mb-6" />
+            <h3 className="text-2xl font-black text-gray-900 mb-2">Module Trajets en cours de construction</h3>
+            <p className="text-gray-500">Bientôt, vous verrez tous les véhicules sur une carte interactive ici.</p>
+          </div>
+        )}
+
+        {/* ----------------------------------------------------- */}
+        {/* MODULE 4 : COMPTABILITÉ (PLACEHOLDER)                 */}
+        {/* ----------------------------------------------------- */}
+        {activeMenu === "compta" && (
+          <div className="bg-white p-16 rounded-[2.5rem] text-center border border-gray-100 shadow-sm animate-in fade-in duration-300">
+            <Wallet size={64} className="mx-auto text-gray-200 mb-6" />
+            <h3 className="text-2xl font-black text-gray-900 mb-2">Module Comptabilité en cours de construction</h3>
+            <p className="text-gray-500">Le grand livre des finances, commissions et paiements arrivera ici.</p>
           </div>
         )}
 
       </main>
 
-      {/* MODAL D'EXAMEN DES DOCUMENTS */}
+      {/* MODAL D'EXAMEN DES DOCUMENTS (KYC) */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
-            
             <header className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <div>
                 <h3 className="text-2xl font-black text-gray-900">Examen : {selectedUser.full_name}</h3>
@@ -208,20 +335,13 @@ export default function ERPAdmin() {
             </div>
 
             <footer className="p-6 bg-white border-t border-gray-100 flex gap-4 justify-end">
-              <button 
-                onClick={() => handleActionKYC(selectedUser.id, 'rejete')}
-                className="px-8 py-4 bg-red-50 text-red-600 font-black rounded-2xl hover:bg-red-100 transition flex items-center gap-2"
-              >
+              <button onClick={() => handleActionKYC(selectedUser.id, 'rejete')} className="px-8 py-4 bg-red-50 text-red-600 font-black rounded-2xl hover:bg-red-100 transition flex items-center gap-2">
                 <XCircle size={20} /> Rejeter
               </button>
-              <button 
-                onClick={() => handleActionKYC(selectedUser.id, 'verifie')}
-                className="px-8 py-4 bg-green-500 text-white font-black rounded-2xl hover:bg-green-600 transition shadow-lg shadow-green-500/30 flex items-center gap-2"
-              >
+              <button onClick={() => handleActionKYC(selectedUser.id, 'verifie')} className="px-8 py-4 bg-green-500 text-white font-black rounded-2xl hover:bg-green-600 transition shadow-lg shadow-green-500/30 flex items-center gap-2">
                 <CheckCircle size={20} /> Approuver le profil
               </button>
             </footer>
-
           </div>
         </div>
       )}
@@ -229,13 +349,9 @@ export default function ERPAdmin() {
   );
 }
 
-// Composant pour les boutons du menu latéral
 function MenuBtn({ icon, label, active, badge, onClick }: any) {
   return (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${active ? 'bg-yamo-teal text-white shadow-lg shadow-yamo-teal/20' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
-    >
+    <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${active ? 'bg-yamo-teal text-white shadow-lg shadow-yamo-teal/20' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
       <div className="flex items-center gap-3 font-bold">
         {icon} <span>{label}</span>
       </div>
