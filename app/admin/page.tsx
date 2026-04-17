@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ShieldCheck, Users, Map, Wallet, Search, 
   CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
   Clock, CheckCircle2, Ban, MoreVertical, Lock, User as UserIcon,
-  Activity, TrendingUp, DollarSign, MapPin, Navigation, Car, PlusCircle
+  Activity, TrendingUp, DollarSign, MapPin, Navigation, Car, PlusCircle, Trash2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -34,7 +34,6 @@ export default function ERPAdmin() {
   const [liveTrips, setLiveTrips] = useState<any[]>([]);
   const [loadingLive, setLoadingLive] = useState(true);
   
-  // --- NOUVEAUX ÉTATS COMPTA ---
   const [statsCompta, setStatsCompta] = useState({ volumeGlobal: 0, commissionYamoh: 0, totalBillets: 0, totalWallets: 0 });
   const [chauffeurs, setChauffeurs] = useState<any[]>([]);
   const [loadingCompta, setLoadingCompta] = useState(true);
@@ -124,6 +123,22 @@ export default function ERPAdmin() {
     setLoadingUsers(false);
   };
 
+  // --- NOUVELLE FONCTION : SUPPRIMER UN UTILISATEUR ---
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    const confirm = window.confirm(`⚠️ ATTENTION : Voulez-vous vraiment bannir et supprimer les données de ${userName} ? Cette action est irréversible.`);
+    if (!confirm) return;
+
+    // Suppression du profil (si la BDD a le "Cascade Delete" activé, ça supprimera aussi ses trajets/réservations)
+    const { error } = await supabase.from('profiles').delete().eq('id', userId);
+
+    if (error) {
+      alert("Erreur lors de la suppression : " + error.message);
+    } else {
+      alert(`${userName} a été supprimé de la plateforme avec succès.`);
+      fetchAllUsers(); // On met à jour la liste
+    }
+  };
+
   const fetchLiveTrips = async () => {
     setLoadingLive(true);
     const today = new Date().toISOString().split('T')[0];
@@ -132,64 +147,41 @@ export default function ERPAdmin() {
     setLoadingLive(false);
   };
 
-  // --- NOUVELLE FONCTION COMPTA ---
   const fetchCompta = async () => {
     setLoadingCompta(true);
-    
-    // 1. Calcul des gains via les réservations validées
     const { data: resas } = await supabase.from('reservations').select('places_reservees, statut, trajets(prix)').eq('statut', 'valide');
-    let volumeGlobal = 0;
-    let totalBillets = 0;
-    
+    let volumeGlobal = 0; let totalBillets = 0;
     if (resas) {
       totalBillets = resas.length;
-      resas.forEach((r: any) => {
-        if (r.trajets?.prix) volumeGlobal += (r.places_reservees || 1) * r.trajets.prix;
-      });
+      resas.forEach((r: any) => { if (r.trajets?.prix) volumeGlobal += (r.places_reservees || 1) * r.trajets.prix; });
     }
+    const commissionYamoh = volumeGlobal * 0.10;
     
-    const commissionYamoh = volumeGlobal * 0.10; // Yamoh gagne 10%
-    
-    // 2. Récupération des portefeuilles chauffeurs
     const { data: drivers } = await supabase.from('profiles').select('*').eq('role', 'chauffeur').order('solde_wallet', { ascending: false });
     let totalWallets = 0;
-    
-    if (drivers) {
-      setChauffeurs(drivers);
-      drivers.forEach(d => { totalWallets += (d.solde_wallet || 0); });
-    }
+    if (drivers) { setChauffeurs(drivers); drivers.forEach(d => { totalWallets += (d.solde_wallet || 0); }); }
     
     setStatsCompta({ volumeGlobal, commissionYamoh, totalBillets, totalWallets });
     setLoadingCompta(false);
   };
 
-  // --- RECHARGER UN WALLET MANUELLEMENT ---
   const handleRechargerWallet = async (chauffeur: any) => {
     const montantStr = window.prompt(`Entrez le montant à recharger pour ${chauffeur.full_name} (en FCFA) :`);
     if (!montantStr) return;
-    
     const montant = parseInt(montantStr, 10);
-    if (isNaN(montant) || montant <= 0) {
-      alert("Montant invalide.");
-      return;
-    }
+    if (isNaN(montant) || montant <= 0) { alert("Montant invalide."); return; }
 
     const nouveauSolde = (chauffeur.solde_wallet || 0) + montant;
-
     const { error } = await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', chauffeur.id);
     
     if (error) {
       alert("Erreur lors de la recharge : " + error.message);
     } else {
-      // Notification au chauffeur
       await supabase.from('notifications').insert([{
-        user_id: chauffeur.id,
-        titre: "Recharge effectuée 💰",
-        message: `Votre portefeuille Yamoh a été crédité de ${montant} FCFA. Nouveau solde : ${nouveauSolde} FCFA.`,
-        type: 'systeme'
+        user_id: chauffeur.id, titre: "Recharge effectuée 💰", message: `Votre portefeuille Yamoh a été crédité de ${montant} FCFA. Nouveau solde : ${nouveauSolde} FCFA.`, type: 'systeme'
       }]);
       alert(`Recharge de ${montant} FCFA effectuée avec succès !`);
-      fetchCompta(); // Met à jour le tableau
+      fetchCompta(); 
     }
   };
 
@@ -272,7 +264,6 @@ export default function ERPAdmin() {
           </div>
         </header>
 
-        {/* --- MODULE 1: VUE D'ENSEMBLE --- */}
         {activeMenu === "dashboard" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-300">
              <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100 flex items-center gap-6">
@@ -290,7 +281,6 @@ export default function ERPAdmin() {
           </div>
         )}
 
-        {/* --- MODULE 2: KYC --- */}
         {activeMenu === "kyc" && (
            loadingKyc ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
            pendingUsers.length === 0 ? (
@@ -314,7 +304,6 @@ export default function ERPAdmin() {
           )
         )}
 
-        {/* --- MODULE 3: TRAJETS EN DIRECT --- */}
         {activeMenu === "live" && (
            loadingLive ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
            liveTrips.length === 0 ? (
@@ -356,14 +345,14 @@ export default function ERPAdmin() {
            )
         )}
 
-        {/* --- MODULE 4: UTILISATEURS --- */}
+        {/* --- MODULE 4: UTILISATEURS (MISE À JOUR AVEC SUPPRESSION) --- */}
         {activeMenu === "users" && (
            loadingUsers ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
            <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
              <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
-                    <th className="p-6">Utilisateur</th><th className="p-6">Rôle</th><th className="p-6">Contact</th><th className="p-6">Statut KYC</th>
+                    <th className="p-6">Utilisateur</th><th className="p-6">Rôle</th><th className="p-6">Contact</th><th className="p-6">Statut KYC</th><th className="p-6 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -380,6 +369,16 @@ export default function ERPAdmin() {
                          u.verification_status === 'en_attente' ? <span className="text-orange-500 font-bold text-sm flex gap-1"><Clock size={16}/> Attente</span> :
                          <span className="text-gray-400 font-bold text-sm flex gap-1"><ShieldCheck size={16}/> Non initié</span>}
                       </td>
+                      <td className="p-6 text-right">
+                        {/* BOUTON DE SUPPRESSION AJOUTÉ ICI */}
+                        <button 
+                          onClick={() => handleDeleteUser(u.id, u.full_name)}
+                          className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-xl transition" 
+                          title="Bannir et Supprimer"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -387,26 +386,21 @@ export default function ERPAdmin() {
            </div>
         )}
 
-        {/* --- MODULE 5: COMPTABILITÉ FINANCIÈRE --- */}
         {activeMenu === "compta" && (
            loadingCompta ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
            <div className="space-y-8 animate-in fade-in duration-300">
-             
-             {/* KPI CARDS */}
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                  <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4"><Activity size={24}/></div>
                  <p className="text-gray-500 font-bold uppercase text-xs tracking-wider mb-1">Volume global (Brut)</p>
                  <p className="text-3xl font-black text-gray-900">{statsCompta.volumeGlobal.toLocaleString()} <span className="text-lg">FCFA</span></p>
                </div>
-               
                <div className="bg-gray-900 p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden">
                  <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-bl-full pointer-events-none"></div>
                  <div className="w-12 h-12 bg-white/10 text-yamo-teal rounded-full flex items-center justify-center mb-4"><TrendingUp size={24}/></div>
                  <p className="text-gray-400 font-bold uppercase text-xs tracking-wider mb-1">Chiffre d'Affaires Yamoh (10%)</p>
                  <p className="text-4xl font-black text-yamo-teal">{statsCompta.commissionYamoh.toLocaleString()} <span className="text-lg text-white">FCFA</span></p>
                </div>
-
                <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                  <div className="w-12 h-12 bg-yamo-orange/10 text-yamo-orange rounded-full flex items-center justify-center mb-4"><Wallet size={24}/></div>
                  <p className="text-gray-500 font-bold uppercase text-xs tracking-wider mb-1">Total Soldes Chauffeurs</p>
@@ -414,53 +408,25 @@ export default function ERPAdmin() {
                </div>
              </div>
 
-             {/* GESTION DES WALLETS CHAUFFEURS */}
              <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-6 border-b border-gray-100">
-                  <h3 className="text-xl font-black text-gray-900">Portefeuilles Chauffeurs</h3>
-                  <p className="text-gray-500 text-sm mt-1">Rechargez les comptes suite aux paiements Mobile Money.</p>
-                </div>
+                <div className="p-6 border-b border-gray-100"><h3 className="text-xl font-black text-gray-900">Portefeuilles Chauffeurs</h3><p className="text-gray-500 text-sm mt-1">Rechargez les comptes suite aux paiements Mobile Money.</p></div>
                 <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
-                      <th className="p-6">Chauffeur</th>
-                      <th className="p-6">Contact</th>
-                      <th className="p-6">Solde Wallet</th>
-                      <th className="p-6 text-right">Action</th>
-                    </tr>
-                  </thead>
+                  <thead><tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black"><th className="p-6">Chauffeur</th><th className="p-6">Contact</th><th className="p-6">Solde Wallet</th><th className="p-6 text-right">Action</th></tr></thead>
                   <tbody className="divide-y divide-gray-50">
                     {filteredChauffeurs.map(c => (
                       <tr key={c.id} className="hover:bg-gray-50/50 transition">
-                        <td className="p-6 flex items-center gap-4">
-                          <div className="w-10 h-10 bg-gray-100 font-black rounded-full flex items-center justify-center text-gray-700">{c.full_name?.charAt(0) || '?'}</div>
-                          <p className="font-bold">{c.full_name}</p>
-                        </td>
+                        <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 bg-gray-100 font-black rounded-full flex items-center justify-center text-gray-700">{c.full_name?.charAt(0) || '?'}</div><p className="font-bold">{c.full_name}</p></td>
                         <td className="p-6 font-medium text-sm text-gray-600">{c.phone}</td>
-                        <td className="p-6">
-                          <span className={`font-black text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                            {c.solde_wallet || 0} FCFA
-                          </span>
-                        </td>
-                        <td className="p-6 text-right">
-                          <button 
-                            onClick={() => handleRechargerWallet(c)}
-                            className="bg-yamo-teal/10 text-yamo-teal hover:bg-yamo-teal hover:text-white font-bold px-4 py-2 rounded-xl transition flex items-center gap-2 ml-auto"
-                          >
-                            <PlusCircle size={16}/> Recharger
-                          </button>
-                        </td>
+                        <td className="p-6"><span className={`font-black text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>{c.solde_wallet || 0} FCFA</span></td>
+                        <td className="p-6 text-right"><button onClick={() => handleRechargerWallet(c)} className="bg-yamo-teal/10 text-yamo-teal hover:bg-yamo-teal hover:text-white font-bold px-4 py-2 rounded-xl transition flex items-center gap-2 ml-auto"><PlusCircle size={16}/> Recharger</button></td>
                       </tr>
                     ))}
-                    {filteredChauffeurs.length === 0 && (
-                      <tr><td colSpan={4} className="p-8 text-center text-gray-400 font-bold">Aucun chauffeur trouvé.</td></tr>
-                    )}
+                    {filteredChauffeurs.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-gray-400 font-bold">Aucun chauffeur trouvé.</td></tr>}
                   </tbody>
                </table>
              </div>
            </div>
         )}
-
       </main>
 
       {/* --- MODAL KYC --- */}
