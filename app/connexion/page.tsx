@@ -2,28 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Lock, User as UserIcon, Phone, Calendar, Users, Car } from "lucide-react";
+import { ArrowLeft, Lock, User as UserIcon, Phone, Calendar, Users, Car, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function Connexion() {
   const router = useRouter();
   
-  // États de navigation dans le formulaire
   const [isLogin, setIsLogin] = useState(true);
-  const [roleSelection, setRoleSelection] = useState(false); // Affiche l'écran de choix de rôle
+  const [roleSelection, setRoleSelection] = useState(false); 
   const [role, setRole] = useState<"passager" | "chauffeur">("passager");
 
-  // Infos de base (Le téléphone remplace l'email comme demandé précédemment)
   const [phoneInput, setPhoneInput] = useState("");
   const [password, setPassword] = useState("");
   
-  // Infos Inscription
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [gender, setGender] = useState("");
 
-  // Infos spécifiques Chauffeur
   const [vehiculeMarque, setVehiculeMarque] = useState("");
   const [vehiculeCouleur, setVehiculeCouleur] = useState("");
   const [vehiculePlaque, setVehiculePlaque] = useState("");
@@ -32,44 +28,43 @@ export default function Connexion() {
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  
+  // NOUVEAU : État pour gérer le beau pop-up de succès
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg("");
 
-    // 1. On nettoie le numéro (enlève les espaces)
     const formattedPhone = phoneInput.replace(/\s+/g, '');
-    
-    // 2. On ajoute l'indicatif pour l'affichage dans le profil
     let finalPhone = formattedPhone;
     if (!finalPhone.startsWith('+')) {
       finalPhone = '+225' + finalPhone;
     }
-
-    // 3. L'ASTUCE MAGIQUE : On transforme le numéro en "faux email" pour Supabase
-    // Ex: +2250748361123 devient 2250748361123@yamoh.net
     const fakeEmail = `${finalPhone.replace('+', '')}@yamoh.net`;
 
     if (isLogin) {
-      // --- CONNEXION ---
       const { error } = await supabase.auth.signInWithPassword({
-        email: fakeEmail, // On utilise le faux email pour se connecter
+        email: fakeEmail, 
         password,
       });
       
-      if (error) setErrorMsg("Numéro ou mot de passe incorrect.");
-      else router.push("/");
+      if (error) {
+        setErrorMsg("Numéro ou mot de passe incorrect.");
+        setLoading(false);
+      } else {
+        router.push("/");
+      }
       
     } else {
-      // --- INSCRIPTION ---
       const { data, error } = await supabase.auth.signUp({
-        email: fakeEmail, // On utilise le faux email pour contourner le blocage
+        email: fakeEmail, 
         password,
         options: {
           data: {
             full_name: name,
-            phone: finalPhone, // On sauvegarde quand même son VRAI numéro dans son profil !
+            phone: finalPhone, 
             birth_date: birthDate,
             gender: gender,
             role: role,
@@ -87,15 +82,34 @@ export default function Connexion() {
 
       if (error) {
         setErrorMsg(error.message);
+        setLoading(false);
       } else {
-        alert("Compte créé avec succès ! Passons à la vérification de vos documents.");
-        router.push("/verif-identite");
+        // NOUVEAU : On affiche le pop-up pro au lieu de "alert()"
+        setShowSuccess(true);
+        // On patiente 2.5 secondes pour qu'il lise, puis on redirige
+        setTimeout(() => {
+          router.push("/verif-identite");
+        }, 2500);
       }
     }
-    setLoading(false);
   };
 
-  // ÉCRAN 1 : CHOIX DU RÔLE POUR L'INSCRIPTION
+  // NOUVEAU : Le composant du Pop-up de succès
+  if (showSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-10 rounded-[3rem] shadow-2xl flex flex-col items-center text-center animate-in zoom-in duration-300 max-w-md w-full border border-gray-100">
+          <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
+            <CheckCircle2 size={50} />
+          </div>
+          <h2 className="text-3xl font-black text-gray-900 mb-2">Compte créé !</h2>
+          <p className="text-gray-500 text-lg mb-8">Redirection vers la vérification de vos documents...</p>
+          <div className="w-8 h-8 border-4 border-yamo-teal border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
   if (roleSelection) {
     return (
       <main className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -136,7 +150,6 @@ export default function Connexion() {
     );
   }
 
-  // ÉCRAN 2 : FORMULAIRE DE CONNEXION / INSCRIPTION
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col font-sans">
       <header className="px-6 py-4 bg-white shadow-sm flex items-center gap-4">
@@ -154,7 +167,7 @@ export default function Connexion() {
           </div>
 
           {errorMsg && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-sm text-center font-medium">
+            <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-sm text-center font-medium animate-in fade-in">
               {errorMsg}
             </div>
           )}
@@ -163,7 +176,6 @@ export default function Connexion() {
             
             {!isLogin && (
               <>
-                {/* --- INFOS COMMUNES --- */}
                 <h3 className="font-bold text-lg border-b border-gray-100 pb-2 mt-2">Informations personnelles</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-2">
@@ -194,7 +206,6 @@ export default function Connexion() {
                   </div>
                 </div>
 
-                {/* --- INFOS CHAUFFEUR (Affiché uniquement si rôle = chauffeur) --- */}
                 {role === 'chauffeur' && (
                   <div className="mt-4 bg-[#FFF0E8] p-5 rounded-2xl border border-yamo-orange/20 space-y-4">
                     <h3 className="font-bold text-lg border-b border-yamo-orange/20 pb-2 text-yamo-orange flex items-center gap-2">
@@ -233,7 +244,6 @@ export default function Connexion() {
               </>
             )}
 
-            {/* --- COMMUN : TÉLÉPHONE & MOT DE PASSE --- */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-bold text-gray-600">Numéro de téléphone</label>
               <div className="relative flex items-center">
@@ -250,7 +260,8 @@ export default function Connexion() {
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className={`w-full text-white font-black text-lg py-4 rounded-2xl mt-4 transition duration-300 shadow-lg ${loading ? 'bg-gray-400' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
+            <button type="submit" disabled={loading} className={`w-full text-white font-black text-lg py-4 rounded-2xl mt-4 transition duration-300 shadow-lg flex justify-center items-center gap-2 ${loading ? 'bg-gray-400' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
+              {loading && <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
               {loading ? "Chargement..." : (isLogin ? "Se connecter" : "Valider mon inscription")}
             </button>
           </form>
