@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX, Calendar, MapPin } from "lucide-react";
+import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX, Calendar, MapPin, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, Suspense } from "react"; 
 import { supabase } from "@/lib/supabase";
@@ -20,6 +20,9 @@ function RechercheContent() {
   const [reservingId, setReservingId] = useState<string | null>(null);
   const [viewingProfile, setViewingProfile] = useState<any>(null);
   const [contactLoading, setContactLoading] = useState(false);
+  
+  // NOUVEAU : État pour gérer le beau pop-up de succès
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -30,7 +33,6 @@ function RechercheContent() {
       if (!depart || !destination) return;
       setLoading(true);
       
-      // 1. ASTUCE INFAILLIBLE : On récupère UNIQUEMENT les trajets (Évite le crash de jointure Supabase)
       const { data, error } = await supabase
         .from('trajets')
         .select('*')
@@ -43,7 +45,6 @@ function RechercheContent() {
         return;
       }
 
-      // 2. On fait le tri en JavaScript (Ignore les accents, les majuscules et les virgules)
       const cleanString = (str: string) => {
         if (!str) return "";
         return str.split(',')[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -59,13 +60,11 @@ function RechercheContent() {
         const matchDep = tDep.includes(searchDep) || searchDep.includes(tDep);
         const matchDest = tDest.includes(searchDest) || searchDest.includes(tDest);
 
-        // Correction de la date
         const matchDate = !dateRecherche || !t.date_depart || t.date_depart.startsWith(dateRecherche);
 
         return matchDep && matchDest && matchDate;
       });
 
-      // 3. On fusionne les Profils manuellement avec le JavaScript !
       if (resultatsTrouves.length > 0) {
         const userIds = [...new Set(resultatsTrouves.map(t => t.user_id).filter(Boolean))];
         
@@ -162,8 +161,13 @@ function RechercheContent() {
       }]);
     }
 
-    alert("Réservation confirmée ! Le conducteur a été notifié.");
-    router.push('/mes-trajets');
+    // NOUVEAU : Affichage du beau pop-up au lieu de l'alert()
+    setShowSuccess(true);
+    
+    // On patiente 2.5 secondes pour l'animation, puis on redirige vers les billets
+    setTimeout(() => {
+      router.push('/mes-trajets');
+    }, 2500);
   };
 
   const formatDate = (dateString: string) => {
@@ -173,7 +177,7 @@ function RechercheContent() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col font-sans pb-12">
+    <main className="min-h-screen bg-gray-50 flex flex-col font-sans pb-12 relative">
       <header className="px-6 py-4 bg-white shadow-sm flex items-center gap-4 sticky top-0 z-40">
         <Link href="/">
           <ArrowLeft size={24} className="text-gray-600 hover:text-black transition" />
@@ -282,7 +286,22 @@ function RechercheContent() {
         )}
       </div>
 
-      {viewingProfile && (
+      {/* NOUVEAU : LE POP-UP DE SUCCÈS POUR LA RÉSERVATION */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white p-10 rounded-[3rem] shadow-2xl flex flex-col items-center text-center animate-in zoom-in duration-300 max-w-md w-full border border-gray-100">
+            <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
+              <CheckCircle2 size={50} />
+            </div>
+            <h2 className="text-3xl font-black text-gray-900 mb-2">Place réservée !</h2>
+            <p className="text-gray-500 text-lg mb-8">Le conducteur a été notifié. Redirection vers vos billets...</p>
+            <div className="w-8 h-8 border-4 border-yamo-teal border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PROFIL CONDUCTEUR */}
+      {viewingProfile && !showSuccess && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
             <button onClick={() => setViewingProfile(null)} className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition">
