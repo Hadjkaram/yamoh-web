@@ -30,10 +30,10 @@ function RechercheContent() {
       if (!depart || !destination) return;
       setLoading(true);
       
-      // 1. ASTUCE INFAILLIBLE : On récupère tous les trajets avec des places dispos
+      // 1. ASTUCE INFAILLIBLE : On récupère UNIQUEMENT les trajets (Évite le crash de jointure Supabase)
       const { data, error } = await supabase
         .from('trajets')
-        .select(`*, profiles (*)`)
+        .select('*') // On a retiré le "profiles (*)" qui bloquait tout !
         .gt('places_disponibles', 0);
 
       if (error) {
@@ -46,26 +46,44 @@ function RechercheContent() {
       // 2. On fait le tri en JavaScript (Ignore les accents, les majuscules et les virgules)
       const cleanString = (str: string) => {
         if (!str) return "";
-        // On prend juste la ville avant la virgule, on enlève les accents et on met en minuscule
         return str.split(',')[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       };
 
       const searchDep = cleanString(depart);
       const searchDest = cleanString(destination);
 
-      const resultatsTrouves = (data || []).filter(t => {
+      let resultatsTrouves = (data || []).filter(t => {
         const tDep = cleanString(t.depart);
         const tDest = cleanString(t.destination);
 
-        // Vérification Départ et Destination (Tolérance si un mot est inclus dans l'autre)
         const matchDep = tDep.includes(searchDep) || searchDep.includes(tDep);
         const matchDest = tDest.includes(searchDest) || searchDest.includes(tDest);
 
-        // Vérification de la date (Accepte la bonne date OU les trajets sans date)
-        const matchDate = !dateRecherche || t.date_depart === dateRecherche || !t.date_depart;
+        // Correction de la date (Utilisation de startsWith pour ignorer les heures parasites de Postgres)
+        const matchDate = !dateRecherche || !t.date_depart || t.date_depart.startsWith(dateRecherche);
 
         return matchDep && matchDest && matchDate;
       });
+
+      // 3. On fusionne les Profils manuellement avec le JavaScript !
+      if (resultatsTrouves.length > 0) {
+        // On liste les ID des chauffeurs
+        const userIds = [...new Set(resultatsTrouves.map(t => t.user_id).filter(Boolean))];
+        
+        if (userIds.length > 0) {
+          // On va chercher leurs profils
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('id', userIds);
+          
+          // On les intègre aux trajets
+          resultatsTrouves = resultatsTrouves.map(t => ({
+            ...t,
+            profiles: profilesData?.find(p => p.id === t.user_id) || {}
+          }));
+        }
+      }
 
       setTrajets(resultatsTrouves);
       setLoading(false);
@@ -308,17 +326,5 @@ function RechercheContent() {
         </div>
       )}
     </main>
-  );
-}
-
-export default function RechercheResultats() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 font-black text-yamo-teal text-xl">
-        Chargement de la recherche...
-      </div>
-    }>
-      <RechercheContent />
-    </Suspense>
   );
 }
