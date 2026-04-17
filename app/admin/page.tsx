@@ -99,6 +99,12 @@ export default function ERPAdmin() {
     setLoadingDocs(false);
   };
 
+  // FONCTION MANQUANTE REMISE EN PLACE ICI
+  const openUserModal = (user: any) => {
+    setSelectedUser(user);
+    loadUserDocuments(user.id);
+  };
+
   const handleActionKYC = async (userId: string, action: 'verifie' | 'rejete') => {
     const confirm = window.confirm(`Voulez-vous vraiment ${action === 'verifie' ? 'VALIDER' : 'REJETER'} ce profil ?`);
     if (!confirm) return;
@@ -120,7 +126,6 @@ export default function ERPAdmin() {
     setLoadingUsers(false);
   };
 
-  // NOUVEAU : Récupérer les trajets d'aujourd'hui
   const fetchLiveTrips = async () => {
     setLoadingLive(true);
     const today = new Date().toISOString().split('T')[0];
@@ -129,7 +134,6 @@ export default function ERPAdmin() {
     setLoadingLive(false);
   };
 
-  // NOUVEAU : Calculer la comptabilité basée sur les billets scannés (valide)
   const fetchCompta = async () => {
     setLoadingCompta(true);
     const { data } = await supabase.from('reservations').select('places_reservees, statut, trajets(prix)').eq('statut', 'valide');
@@ -144,7 +148,7 @@ export default function ERPAdmin() {
       });
     }
     
-    const commission = volumeGlobal * 0.10; // Yamoh prend 10%
+    const commission = volumeGlobal * 0.10;
     const aReverser = volumeGlobal - commission;
     
     setStatsCompta({ volumeGlobal, commission, aReverser, totalBillets });
