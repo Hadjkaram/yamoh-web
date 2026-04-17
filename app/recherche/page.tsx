@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX, Calendar, MapPin, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX, Calendar, MapPin, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, Suspense } from "react"; 
 import { supabase } from "@/lib/supabase";
@@ -13,6 +13,8 @@ function RechercheContent() {
   const depart = searchParams.get("depart");
   const destination = searchParams.get("destination");
   const dateRecherche = searchParams.get("date");
+  // On récupère le nombre de places demandées par le client (par défaut 1)
+  const placesDemandees = parseInt(searchParams.get("passagers") || "1");
 
   const [trajets, setTrajets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,8 +22,6 @@ function RechercheContent() {
   const [reservingId, setReservingId] = useState<string | null>(null);
   const [viewingProfile, setViewingProfile] = useState<any>(null);
   const [contactLoading, setContactLoading] = useState(false);
-  
-  // NOUVEAU : État pour gérer le beau pop-up de succès
   const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
@@ -33,10 +33,10 @@ function RechercheContent() {
       if (!depart || !destination) return;
       setLoading(true);
       
+      // On retire la limite de places pour pouvoir afficher les trajets "Complets" !
       const { data, error } = await supabase
         .from('trajets')
-        .select('*')
-        .gt('places_disponibles', 0);
+        .select('*');
 
       if (error) {
         console.error("Erreur Supabase :", error.message);
@@ -132,8 +132,17 @@ function RechercheContent() {
       return;
     }
 
+    const trajetConcerne = trajets.find(t => t.id === trajetId);
+    
+    // VERIFICATION DE SÉCURITÉ : Est-ce qu'il y a assez de places ?
+    if (!trajetConcerne || trajetConcerne.places_disponibles < placesDemandees) {
+      alert("Désolé, il n'y a plus assez de places pour votre demande.");
+      return;
+    }
+
     setReservingId(trajetId);
 
+    // 1. On enregistre la réservation
     const { error: resaError } = await supabase
       .from('reservations')
       .insert([
@@ -151,20 +160,25 @@ function RechercheContent() {
       return;
     }
 
-    const trajetConcerne = trajets.find(t => t.id === trajetId);
-    if (trajetConcerne && trajetConcerne.user_id) {
+    // 2. LE DÉCOMPTE INTELLIGENT : On met à jour la table trajets
+    const nouvellesPlaces = trajetConcerne.places_disponibles - placesDemandees;
+    await supabase
+      .from('trajets')
+      .update({ places_disponibles: nouvellesPlaces })
+      .eq('id', trajetId);
+
+    // 3. Notification au conducteur
+    if (trajetConcerne.user_id) {
       await supabase.from('notifications').insert([{
         user_id: trajetConcerne.user_id,
         titre: "Nouvelle réservation ! 🚗",
-        message: `${user.user_metadata?.full_name} a réservé une place pour votre trajet ${trajetConcerne.depart.split(',')[0]} → ${trajetConcerne.destination.split(',')[0]}.`,
+        message: `${user.user_metadata?.full_name} a réservé ${placesDemandees} place(s) pour votre trajet ${trajetConcerne.depart.split(',')[0]} → ${trajetConcerne.destination.split(',')[0]}.`,
         type: 'reservation'
       }]);
     }
 
-    // NOUVEAU : Affichage du beau pop-up au lieu de l'alert()
     setShowSuccess(true);
     
-    // On patiente 2.5 secondes pour l'animation, puis on redirige vers les billets
     setTimeout(() => {
       router.push('/mes-trajets');
     }, 2500);
@@ -186,7 +200,9 @@ function RechercheContent() {
           <h1 className="text-lg font-bold text-gray-900 truncate max-w-[250px] md:max-w-md">
             {depart?.split(',')[0] || "Départ"} → {destination?.split(',')[0] || "Destination"}
           </h1>
-          {dateRecherche && <p className="text-sm text-yamo-teal font-medium capitalize">{formatDate(dateRecherche)}</p>}
+          <p className="text-sm text-yamo-teal font-medium capitalize">
+            {dateRecherche ? formatDate(dateRecherche) : "Date au choix"} • {placesDemandees} {placesDemandees > 1 ? 'Passagers' : 'Passager'}
+          </p>
         </div>
       </header>
 
@@ -212,81 +228,99 @@ function RechercheContent() {
           </div>
         ) : (
           <div className="flex flex-col gap-6">
-            <h2 className="font-black text-gray-900 text-xl px-2">{trajets.length} {trajets.length > 1 ? 'trajets disponibles' : 'trajet disponible'}</h2>
+            <h2 className="font-black text-gray-900 text-xl px-2">{trajets.length} {trajets.length > 1 ? 'trajets trouvés' : 'trajet trouvé'}</h2>
             
-            {trajets.map((trajet) => (
-              <div key={trajet.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
-                
-                <div className="flex justify-between items-start mb-6 border-b border-gray-50 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-yamo-teal font-bold text-sm bg-[#E8F4F8] px-3 py-1.5 rounded-xl">
-                      <Calendar size={16} />
-                      <span className="capitalize">{formatDate(trajet.date_depart)}</span>
-                    </div>
-                    {trajet.heure_depart && (
-                      <div className="flex items-center gap-1.5 text-yamo-orange font-black bg-[#FFF0E8] px-3 py-1.5 rounded-xl text-sm">
-                        <Clock size={16} />
-                        {trajet.heure_depart.substring(0, 5)}
+            {trajets.map((trajet) => {
+              // Vérifications intelligentes
+              const isComplet = trajet.places_disponibles === 0;
+              const isNotEnoughSeats = !isComplet && trajet.places_disponibles < placesDemandees;
+
+              return (
+                <div key={trajet.id} className={`bg-white p-6 rounded-[2rem] shadow-sm border transition-all duration-300 group ${isComplet ? 'border-red-100 opacity-80' : 'border-gray-100 hover:shadow-xl hover:-translate-y-1'}`}>
+                  
+                  <div className="flex justify-between items-start mb-6 border-b border-gray-50 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 text-yamo-teal font-bold text-sm bg-[#E8F4F8] px-3 py-1.5 rounded-xl">
+                        <Calendar size={16} />
+                        <span className="capitalize">{formatDate(trajet.date_depart)}</span>
                       </div>
-                    )}
-                  </div>
-                  <div className="text-2xl font-black text-yamo-teal">{trajet.prix} <span className="text-sm">FCFA</span></div>
-                </div>
-
-                <div className="flex gap-4 mb-4 relative pl-2">
-                  <div className="flex flex-col items-center mt-1">
-                    <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
-                    <div className="w-0.5 h-10 bg-gray-200 my-1"></div>
-                    <div className="w-3.5 h-3.5 rounded-full border-[3px] border-yamo-orange"></div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-900 text-lg mb-4 line-clamp-1">{trajet.depart}</p>
-                    <p className="font-bold text-gray-900 text-lg line-clamp-1">{trajet.destination}</p>
-                  </div>
-                </div>
-
-                {trajet.lieu_rendez_vous && (
-                  <div className="mb-6 text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-start gap-3">
-                     <MapPin size={18} className="text-gray-400 mt-0.5 flex-shrink-0"/>
-                     <span><strong className="text-gray-800">Point de RDV :</strong> {trajet.lieu_rendez_vous}</span>
-                  </div>
-                )}
-
-                <div 
-                  onClick={() => setViewingProfile({ ...trajet.profiles, trajetId: trajet.id })}
-                  className="flex justify-between items-center mb-6 p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 cursor-pointer transition border border-gray-100"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white shadow-sm border border-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black text-lg">
-                      {trajet.conducteur_nom ? trajet.conducteur_nom.charAt(0).toUpperCase() : 'C'}
+                      {trajet.heure_depart && (
+                        <div className="flex items-center gap-1.5 text-yamo-orange font-black bg-[#FFF0E8] px-3 py-1.5 rounded-xl text-sm">
+                          <Clock size={16} />
+                          {trajet.heure_depart.substring(0, 5)}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <p className="font-bold text-gray-900">{trajet.conducteur_nom || "Conducteur"}</p>
-                      <p className="text-sm text-gray-500 flex items-center gap-1 font-medium mt-0.5">
-                        <Car size={14} className="text-gray-400" /> {trajet.vehicule}
-                      </p>
+                    <div className="text-2xl font-black text-yamo-teal">{trajet.prix} <span className="text-sm">FCFA</span></div>
+                  </div>
+
+                  <div className="flex gap-4 mb-4 relative pl-2">
+                    <div className="flex flex-col items-center mt-1">
+                      <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
+                      <div className="w-0.5 h-10 bg-gray-200 my-1"></div>
+                      <div className="w-3.5 h-3.5 rounded-full border-[3px] border-yamo-orange"></div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-gray-900 text-lg mb-4 line-clamp-1">{trajet.depart}</p>
+                      <p className="font-bold text-gray-900 text-lg line-clamp-1">{trajet.destination}</p>
                     </div>
                   </div>
-                  <div className="bg-[#E8F4F8] text-yamo-teal px-4 py-1.5 rounded-full font-black text-sm border border-yamo-teal/10">
-                    {trajet.places_disponibles} places
-                  </div>
-                </div>
 
-                <button 
-                  onClick={() => handleReserver(trajet.id)}
-                  disabled={reservingId === trajet.id}
-                  className={`w-full text-white font-black text-xl py-4 rounded-[1.5rem] transition shadow-lg flex items-center justify-center gap-2 ${reservingId === trajet.id ? 'bg-gray-400' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}
-                >
-                  {reservingId === trajet.id && <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
-                  {reservingId === trajet.id ? "Réservation en cours..." : "Réserver ma place"}
-                </button>
-              </div>
-            ))}
+                  {trajet.lieu_rendez_vous && (
+                    <div className="mb-6 text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-start gap-3">
+                       <MapPin size={18} className="text-gray-400 mt-0.5 flex-shrink-0"/>
+                       <span><strong className="text-gray-800">Point de RDV :</strong> {trajet.lieu_rendez_vous}</span>
+                    </div>
+                  )}
+
+                  <div 
+                    onClick={() => setViewingProfile({ ...trajet.profiles, trajetId: trajet.id })}
+                    className="flex justify-between items-center mb-6 p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 cursor-pointer transition border border-gray-100"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white shadow-sm border border-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black text-lg">
+                        {trajet.conducteur_nom ? trajet.conducteur_nom.charAt(0).toUpperCase() : 'C'}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">{trajet.conducteur_nom || "Conducteur"}</p>
+                        <p className="text-sm text-gray-500 flex items-center gap-1 font-medium mt-0.5">
+                          <Car size={14} className="text-gray-400" /> {trajet.vehicule}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* AFFICHAGE DYNAMIQUE DES PLACES RESTANTES */}
+                    <div className={`px-4 py-1.5 rounded-full font-black text-sm border ${isComplet ? 'bg-red-50 text-red-500 border-red-100' : 'bg-[#E8F4F8] text-yamo-teal border-yamo-teal/10'}`}>
+                      {isComplet ? "Complet" : `${trajet.places_disponibles} place${trajet.places_disponibles > 1 ? 's' : ''}`}
+                    </div>
+                  </div>
+
+                  {/* BOUTON INTELLIGENT QUI CHANGE SELON LE STOCK */}
+                  {isComplet ? (
+                    <button disabled className="w-full text-red-500 bg-red-50 border-2 border-red-100 font-black text-xl py-4 rounded-[1.5rem] flex items-center justify-center gap-2 cursor-not-allowed">
+                      <AlertCircle size={20} /> Véhicule Complet
+                    </button>
+                  ) : isNotEnoughSeats ? (
+                    <button disabled className="w-full text-orange-500 bg-orange-50 border-2 border-orange-100 font-black text-lg py-4 rounded-[1.5rem] flex items-center justify-center gap-2 cursor-not-allowed">
+                      <AlertCircle size={20} /> Pas assez de places pour vous
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleReserver(trajet.id)}
+                      disabled={reservingId === trajet.id}
+                      className={`w-full text-white font-black text-xl py-4 rounded-[1.5rem] transition shadow-lg flex items-center justify-center gap-2 ${reservingId === trajet.id ? 'bg-gray-400' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}
+                    >
+                      {reservingId === trajet.id && <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+                      {reservingId === trajet.id ? "Réservation en cours..." : `Réserver ${placesDemandees} place${placesDemandees > 1 ? 's' : ''}`}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* NOUVEAU : LE POP-UP DE SUCCÈS POUR LA RÉSERVATION */}
       {showSuccess && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-10 rounded-[3rem] shadow-2xl flex flex-col items-center text-center animate-in zoom-in duration-300 max-w-md w-full border border-gray-100">
@@ -300,7 +334,6 @@ function RechercheContent() {
         </div>
       )}
 
-      {/* MODAL PROFIL CONDUCTEUR */}
       {viewingProfile && !showSuccess && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
