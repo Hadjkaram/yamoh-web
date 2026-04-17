@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Users, Car, CheckCircle, X, ScanLine, Clock, Trash2, Star, CheckCircle2, History, UserMinus, Phone } from "lucide-react";
+import { ArrowLeft, Users, Car, CheckCircle, X, ScanLine, Clock, Trash2, Star, CheckCircle2, History, UserMinus, Phone, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Html5Qrcode } from "html5-qrcode";
@@ -24,7 +24,10 @@ export default function DashboardConducteur() {
 
   // MODALS
   const [ratingModal, setRatingModal] = useState<any>(null);
-  const [passengerModal, setPassengerModal] = useState<any>(null); // Pour gérer un passager
+  const [passengerModal, setPassengerModal] = useState<any>(null); 
+  
+  // NOUVEAU : MODAL DE CONFIRMATION DESIGN (Remplace le vieux window.confirm)
+  const [confirmDialog, setConfirmDialog] = useState<{titre: string, message: string, actionTexte: string, onConfirm: () => void} | null>(null);
 
   // ÉTATS POUR LA NOTATION
   const [rating, setRating] = useState(0);
@@ -40,7 +43,6 @@ export default function DashboardConducteur() {
 
     const conducteurNom = session.user.user_metadata?.full_name;
     
-    // On récupère les trajets ET les réservations (avec l'ID du passager pour son profil)
     const { data, error } = await supabase
       .from('trajets')
       .select(`
@@ -62,48 +64,58 @@ export default function DashboardConducteur() {
     fetchDashboardData();
   }, [router]);
 
-  // --- SUPPRIMER TOUT LE TRAJET ---
-  const supprimerTrajet = async (trajetId: string) => {
-    const confirmation = window.confirm("Es-tu sûr de vouloir supprimer ce trajet ? Cette action annulera toutes les réservations.");
-    if (confirmation) {
-      try {
-        const { error } = await supabase.from('trajets').delete().eq('id', trajetId);
-        if (error) throw error;
-        setAnnonces(annonces.filter(a => a.id !== trajetId));
-      } catch (err) {
-        alert("Erreur lors de la suppression.");
+  // --- SUPPRIMER TOUT LE TRAJET (AVEC NOUVEAU POP-UP) ---
+  const supprimerTrajet = (trajetId: string) => {
+    setConfirmDialog({
+      titre: "Supprimer le trajet ?",
+      message: "Cette action est irréversible et annulera toutes les réservations associées.",
+      actionTexte: "Oui, supprimer",
+      onConfirm: async () => {
+        setConfirmDialog(null); // On ferme le popup
+        try {
+          const { error } = await supabase.from('trajets').delete().eq('id', trajetId);
+          if (error) throw error;
+          setAnnonces(annonces.filter(a => a.id !== trajetId));
+        } catch (err) {
+          alert("Erreur lors de la suppression.");
+        }
       }
-    }
+    });
   };
 
-  // --- NOUVEAU : REFUSER UN PASSAGER ---
-  const handleRefuserPassager = async (resa: any, trajet: any) => {
-    const confirmation = window.confirm(`Voulez-vous vraiment refuser ${resa.passager_nom} ? Ses places vous seront restituées.`);
-    if (!confirmation) return;
+  // --- REFUSER UN PASSAGER (AVEC NOUVEAU POP-UP) ---
+  const handleRefuserPassager = (resa: any, trajet: any) => {
+    setConfirmDialog({
+      titre: "Refuser ce passager ?",
+      message: `Voulez-vous vraiment refuser ${resa.passager_nom} ? Ses places vous seront restituées.`,
+      actionTexte: "Oui, refuser",
+      onConfirm: async () => {
+        setConfirmDialog(null); // On ferme la confirmation
+        
+        // 1. Suppression
+        await supabase.from('reservations').delete().eq('id', resa.id);
 
-    // 1. On supprime (ou annule) la réservation
-    await supabase.from('reservations').delete().eq('id', resa.id);
+        // 2. Restitution des places
+        const placesRendues = resa.places_reservees || 1;
+        await supabase
+          .from('trajets')
+          .update({ places_disponibles: trajet.places_disponibles + placesRendues })
+          .eq('id', trajet.id);
 
-    // 2. On rend les places au trajet (Le Décompte Inversé !)
-    const placesRendues = resa.places_reservees || 1;
-    await supabase
-      .from('trajets')
-      .update({ places_disponibles: trajet.places_disponibles + placesRendues })
-      .eq('id', trajet.id);
+        // 3. Notification au passager
+        if (resa.passager_id) {
+          await supabase.from('notifications').insert([{
+            user_id: resa.passager_id,
+            titre: "Réservation annulée ❌",
+            message: `Le conducteur a dû annuler votre place sur le trajet ${trajet.depart.split(',')[0]} → ${trajet.destination.split(',')[0]}. Vous ne serez pas facturé.`,
+            type: 'alerte'
+          }]);
+        }
 
-    // 3. On envoie une notification de refus au passager s'il a un ID
-    if (resa.passager_id) {
-      await supabase.from('notifications').insert([{
-        user_id: resa.passager_id,
-        titre: "Réservation annulée ❌",
-        message: `Le conducteur a dû annuler votre place sur le trajet ${trajet.depart.split(',')[0]} → ${trajet.destination.split(',')[0]}. Vous ne serez pas facturé.`,
-        type: 'alerte'
-      }]);
-    }
-
-    alert("Le passager a été refusé. Vos places ont été restaurées.");
-    setPassengerModal(null);
-    fetchDashboardData(); // Rafraîchit l'écran
+        setPassengerModal(null); // On ferme le profil passager
+        fetchDashboardData(); // On rafraichit
+      }
+    });
   };
 
   // --- LOGIQUE DU SCANNER ---
@@ -146,7 +158,6 @@ export default function DashboardConducteur() {
     await supabase.from('reservations').update({ statut: 'valide' }).eq('id', reservationId);
     fetchDashboardData();
 
-    // Ouverture du pop-up de notation !
     setRatingModal({ ...data, titre: `Billet validé pour ${data.passager_nom} !` });
   };
 
@@ -173,11 +184,9 @@ export default function DashboardConducteur() {
     else setSelectedTags([...selectedTags, tag]);
   };
 
-  // FILTRES DES ONGLETS (Basé sur la date)
   const today = new Date().toISOString().split('T')[0];
   const trajetsEnCours = annonces.filter(a => a.date_depart >= today || !a.date_depart);
   const trajetsHistorique = annonces.filter(a => a.date_depart < today && a.date_depart);
-  
   const trajetsAffiches = activeTab === "en_cours" ? trajetsEnCours : trajetsHistorique;
 
   if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-yamo-teal">Chargement...</div>;
@@ -196,7 +205,6 @@ export default function DashboardConducteur() {
 
       <div className="p-4 md:p-8 max-w-4xl mx-auto w-full">
         
-        {/* NOUVEAU : SYSTÈME D'ONGLETS POUR LE CHAUFFEUR */}
         <div className="flex bg-white p-1 rounded-2xl mb-8 shadow-sm border border-gray-100">
           <button 
             onClick={() => setActiveTab("en_cours")} 
@@ -212,7 +220,6 @@ export default function DashboardConducteur() {
           </button>
         </div>
 
-        {/* ZONE DE SCAN UNQUEMENT POUR LES TRAJETS EN COURS */}
         {activeTab === "en_cours" && (
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
@@ -314,7 +321,6 @@ export default function DashboardConducteur() {
             </p>
 
             <div className="w-full flex flex-col gap-3">
-              {/* Si on avait son tel on pourrait l'appeler, pour l'instant on met un bouton factice ou on passe via les messages Yamoh */}
               <button className="w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
                 <Phone size={20} /> Appeler le passager
               </button>
@@ -327,6 +333,34 @@ export default function DashboardConducteur() {
                   <UserMinus size={20} /> Refuser / Annuler
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- LE NOUVEAU MODAL DE CONFIRMATION DESIGN --- */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-sm relative animate-in zoom-in duration-200">
+            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+              <AlertCircle size={40} />
+            </div>
+            <h2 className="text-2xl font-black text-gray-900 text-center mb-2">{confirmDialog.titre}</h2>
+            <p className="text-gray-500 text-sm mb-8 text-center leading-relaxed">{confirmDialog.message}</p>
+            
+            <div className="w-full flex gap-3">
+              <button 
+                onClick={() => setConfirmDialog(null)} 
+                className="flex-1 py-4 font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-2xl transition"
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={confirmDialog.onConfirm} 
+                className="flex-1 py-4 font-bold text-white bg-red-500 hover:bg-red-600 rounded-2xl transition shadow-lg shadow-red-500/20"
+              >
+                {confirmDialog.actionTexte}
+              </button>
             </div>
           </div>
         </div>
