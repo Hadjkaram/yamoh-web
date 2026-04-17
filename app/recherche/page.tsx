@@ -334,15 +334,31 @@ function RechercheContent() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
             <button onClick={() => setViewingProfile(null)} className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20}/></button>
+            
             <div className="flex flex-col items-center text-center mb-6">
               <div className="w-24 h-24 bg-[#E8F4F8] rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-sm font-black text-yamo-teal text-2xl">{viewingProfile.full_name?.charAt(0).toUpperCase()}</div>
               <h3 className="text-2xl font-black text-gray-900">{viewingProfile.full_name}</h3>
               <p className="text-yamo-orange font-bold flex items-center gap-2 mt-1"><Phone size={18} /> {viewingProfile.phone || "Non renseigné"}</p>
             </div>
+            
             <div className="bg-gray-50 p-6 rounded-2xl mb-6 italic text-gray-600 text-center leading-relaxed border border-gray-100">"{viewingProfile.bio || "Pas de bio disponible."}"</div>
-            <button onClick={() => handleContact(viewingProfile.id, viewingProfile.trajetId)} disabled={contactLoading} className="w-full bg-white border-2 border-yamo-teal text-yamo-teal font-black py-4 rounded-2xl hover:bg-yamo-teal hover:text-white transition flex items-center justify-center gap-2">
-              <MessageSquare size={20} /> {contactLoading ? "Connexion..." : "Contacter le conducteur"}
-            </button>
+            
+            {/* NOUVEAU : BOUTONS DE CONTACT (APPEL + MESSAGE) */}
+            <div className="flex flex-col gap-3">
+              {viewingProfile.phone ? (
+                <a 
+                  href={`tel:${viewingProfile.phone}`} 
+                  className="w-full bg-yamo-orange text-white font-black py-4 rounded-2xl hover:bg-[#D55A1A] transition shadow-lg shadow-yamo-orange/20 flex items-center justify-center gap-2"
+                >
+                  <Phone size={20} /> Appeler le conducteur
+                </a>
+              ) : null}
+
+              <button onClick={() => handleContact(viewingProfile.id, viewingProfile.trajetId)} disabled={contactLoading} className="w-full bg-white border-2 border-yamo-teal text-yamo-teal font-black py-4 rounded-2xl hover:bg-yamo-teal hover:text-white transition flex items-center justify-center gap-2">
+                <MessageSquare size={20} /> {contactLoading ? "Connexion..." : "Envoyer un message"}
+              </button>
+            </div>
+
           </div>
         </div>
       )}
