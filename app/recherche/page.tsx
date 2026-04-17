@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX, Calendar, MapPin, CheckCircle2, AlertCircle, Plus, Minus, Repeat, Star } from "lucide-react";
+import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, X, SearchX, Calendar, MapPin, CheckCircle2, AlertCircle, Plus, Minus, Repeat, Star, Snowflake, Briefcase } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, Suspense } from "react"; 
 import { supabase } from "@/lib/supabase";
@@ -22,10 +22,8 @@ function RechercheContent() {
   const [contactLoading, setContactLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // NOUVEAU : État pour stocker la note du chauffeur
   const [driverRating, setDriverRating] = useState<{note: number, count: number} | null>(null);
 
-  // ÉTATS POUR LE MODAL DE RÉSERVATION
   const [bookingModal, setBookingModal] = useState<any>(null);
   const [bookingPlaces, setBookingPlaces] = useState(1);
   const [bookingType, setBookingType] = useState("unique");
@@ -86,7 +84,6 @@ function RechercheContent() {
     fetchTrajets();
   }, [depart, destination, dateRecherche]);
 
-  // NOUVEAU : Récupérer les avis quand on ouvre un profil
   useEffect(() => {
     async function fetchRating() {
       if (!viewingProfile) return;
@@ -108,8 +105,6 @@ function RechercheContent() {
 
   const handleContact = async (conducteurId: string, trajetId: string) => {
     if (!user) { alert("Connectez-vous pour envoyer un message."); router.push('/connexion'); return; }
-    
-    // C'EST ICI QUE ÇA BLOQUAIT DANS TA VIDÉO ! (Si tu es le chauffeur)
     if (user.id === conducteurId) { alert("C'est votre propre trajet !"); return; }
     
     setContactLoading(true);
@@ -138,6 +133,9 @@ function RechercheContent() {
     if (!bookingModal) return;
     setIsReserving(true);
 
+    // CALCUL DES JOURS RESTANTS POUR UN ABONNEMENT
+    const joursAbonnement = bookingModal.jours_reguliers ? bookingModal.jours_reguliers.split(',').length : 5;
+
     const { error: resaError } = await supabase
       .from('reservations')
       .insert([
@@ -147,7 +145,9 @@ function RechercheContent() {
           passager_email: user.email || `${user.phone}@yamoh.net`,
           statut: 'en_attente',
           places_reservees: bookingPlaces,
-          type_reservation: bookingType
+          type_reservation: bookingType,
+          passager_id: user.id, // LIAISON AVEC LE PROFIL POUR LE DASHBOARD CHAUFFEUR
+          jours_restants: bookingType === 'semaine' ? joursAbonnement : null // INITIALISATION DU PASS SEMAINE
         }
       ]);
 
@@ -219,6 +219,7 @@ function RechercheContent() {
             
             {trajets.map((trajet) => {
               const isComplet = trajet.places_disponibles === 0;
+              const isNotEnoughSeats = !isComplet && trajet.places_disponibles < placesDemandeesInit;
 
               return (
                 <div key={trajet.id} className={`bg-white p-6 rounded-[2rem] shadow-sm border transition-all duration-300 group ${isComplet ? 'border-red-100 opacity-80' : 'border-gray-100 hover:shadow-xl hover:-translate-y-1'}`}>
@@ -237,7 +238,7 @@ function RechercheContent() {
                     <div className="text-2xl font-black text-yamo-teal">{trajet.prix} <span className="text-sm">FCFA</span></div>
                   </div>
 
-                  <div className="flex gap-4 mb-4 relative pl-2">
+                  <div className="flex gap-4 mb-2 relative pl-2">
                     <div className="flex flex-col items-center mt-1">
                       <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
                       <div className="w-0.5 h-10 bg-gray-200 my-1"></div>
@@ -248,6 +249,21 @@ function RechercheContent() {
                       <p className="font-bold text-gray-900 text-lg line-clamp-1">{trajet.destination}</p>
                     </div>
                   </div>
+
+                  {/* NOUVEAU : AFFICHAGE DES BADGES DE CONFORT (CLIM / BAGAGES) */}
+                  {(trajet.climatise || trajet.bagages) && (
+                    <div className="flex flex-wrap gap-2 mb-4 pl-2">
+                      {trajet.climatise && <span className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100"><Snowflake size={14}/> Climatisé</span>}
+                      {trajet.bagages && <span className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-2.5 py-1.5 rounded-lg border border-orange-100"><Briefcase size={14}/> Bagages acceptés</span>}
+                    </div>
+                  )}
+
+                  {trajet.lieu_rendez_vous && (
+                    <div className="mb-6 text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-start gap-3">
+                       <MapPin size={18} className="text-gray-400 mt-0.5 flex-shrink-0"/>
+                       <span><strong className="text-gray-800">Point de RDV :</strong> {trajet.lieu_rendez_vous}</span>
+                    </div>
+                  )}
 
                   {trajet.jours_reguliers && (
                     <div className="mb-4 text-sm text-yamo-teal bg-[#E8F4F8] font-bold p-3 rounded-xl flex items-center gap-2">
@@ -278,6 +294,10 @@ function RechercheContent() {
                     <button disabled className="w-full text-red-500 bg-red-50 border-2 border-red-100 font-black text-xl py-4 rounded-[1.5rem] flex items-center justify-center gap-2 cursor-not-allowed">
                       <AlertCircle size={20} /> Véhicule Complet
                     </button>
+                  ) : isNotEnoughSeats ? (
+                    <button disabled className="w-full text-orange-500 bg-orange-50 border-2 border-orange-100 font-black text-lg py-4 rounded-[1.5rem] flex items-center justify-center gap-2 cursor-not-allowed">
+                      <AlertCircle size={20} /> Pas assez de places pour vous
+                    </button>
                   ) : (
                     <button onClick={() => openBookingModal(trajet)} className="w-full text-white font-black text-xl py-4 rounded-[1.5rem] transition shadow-lg flex items-center justify-center gap-2 bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20">
                       Réserver ma place
@@ -290,7 +310,7 @@ function RechercheContent() {
         )}
       </div>
 
-      {/* --- MODAL DE RÉSERVATION INTELLIGENT --- */}
+      {/* --- MODAL DE RÉSERVATION --- */}
       {bookingModal && !showSuccess && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm" onClick={() => setBookingModal(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -347,7 +367,7 @@ function RechercheContent() {
         </div>
       )}
 
-      {/* MODAL PROFIL CONDUCTEUR (NETTOYÉ) */}
+      {/* MODAL PROFIL CONDUCTEUR */}
       {viewingProfile && !showSuccess && !bookingModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
@@ -363,7 +383,6 @@ function RechercheContent() {
               </div>
               <h3 className="text-2xl font-black text-gray-900">{viewingProfile.full_name}</h3>
               
-              {/* SYSTÈME D'ÉTOILES */}
               <div className="flex items-center gap-1 text-yamo-orange mt-2 mb-2">
                 <Star size={18} className={driverRating?.count && driverRating.count > 0 ? "fill-current" : ""} />
                 <span className="font-bold text-gray-800">{driverRating?.count && driverRating.count > 0 ? driverRating.note : 'Nouveau'}</span>
@@ -375,7 +394,6 @@ function RechercheContent() {
               "{viewingProfile.bio || "Conducteur Yamoh"}"
             </div>
 
-            {/* BOUTONS DE CONTACT DIRECTS (APPEL + MESSAGE) */}
             <div className="flex flex-col gap-4">
               {viewingProfile.phone ? (
                 <a 
