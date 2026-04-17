@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ShieldCheck, Users, Map, Wallet, Search, 
   CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
   Clock, CheckCircle2, Ban, MoreVertical, Lock, User as UserIcon,
-  Activity, TrendingUp, DollarSign, MapPin, Navigation, Car
+  Activity, TrendingUp, DollarSign, MapPin, Navigation, Car, PlusCircle
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -31,13 +31,14 @@ export default function ERPAdmin() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
-  // NOUVEAUX ÉTATS
   const [liveTrips, setLiveTrips] = useState<any[]>([]);
   const [loadingLive, setLoadingLive] = useState(true);
-  const [statsCompta, setStatsCompta] = useState({ volumeGlobal: 0, commission: 0, aReverser: 0, totalBillets: 0 });
+  
+  // --- NOUVEAUX ÉTATS COMPTA ---
+  const [statsCompta, setStatsCompta] = useState({ volumeGlobal: 0, commissionYamoh: 0, totalBillets: 0, totalWallets: 0 });
+  const [chauffeurs, setChauffeurs] = useState<any[]>([]);
   const [loadingCompta, setLoadingCompta] = useState(true);
 
-  // 1. VÉRIFICATION DE L'AUTORISATION AU CHARGEMENT
   useEffect(() => {
     checkAdminAuth();
   }, []);
@@ -65,7 +66,6 @@ export default function ERPAdmin() {
     setAuthLoading(false);
   };
 
-  // 2. CHARGEMENT DES DONNÉES SI AUTORISÉ
   useEffect(() => {
     if (isAuthorized) {
       if (activeMenu === "kyc") fetchPendingKYC();
@@ -75,7 +75,6 @@ export default function ERPAdmin() {
     }
   }, [activeMenu, isAuthorized]);
 
-  // --- REQUÊTES BDD ---
   const fetchPendingKYC = async () => {
     setLoadingKyc(true);
     const { data } = await supabase.from('profiles').select('*').eq('verification_status', 'en_attente').order('created_at', { ascending: false });
@@ -99,7 +98,6 @@ export default function ERPAdmin() {
     setLoadingDocs(false);
   };
 
-  // FONCTION MANQUANTE REMISE EN PLACE ICI
   const openUserModal = (user: any) => {
     setSelectedUser(user);
     loadUserDocuments(user.id);
@@ -134,28 +132,67 @@ export default function ERPAdmin() {
     setLoadingLive(false);
   };
 
+  // --- NOUVELLE FONCTION COMPTA ---
   const fetchCompta = async () => {
     setLoadingCompta(true);
-    const { data } = await supabase.from('reservations').select('places_reservees, statut, trajets(prix)').eq('statut', 'valide');
     
+    // 1. Calcul des gains via les réservations validées
+    const { data: resas } = await supabase.from('reservations').select('places_reservees, statut, trajets(prix)').eq('statut', 'valide');
     let volumeGlobal = 0;
     let totalBillets = 0;
     
-    if (data) {
-      totalBillets = data.length;
-      data.forEach((r: any) => {
+    if (resas) {
+      totalBillets = resas.length;
+      resas.forEach((r: any) => {
         if (r.trajets?.prix) volumeGlobal += (r.places_reservees || 1) * r.trajets.prix;
       });
     }
     
-    const commission = volumeGlobal * 0.10;
-    const aReverser = volumeGlobal - commission;
+    const commissionYamoh = volumeGlobal * 0.10; // Yamoh gagne 10%
     
-    setStatsCompta({ volumeGlobal, commission, aReverser, totalBillets });
+    // 2. Récupération des portefeuilles chauffeurs
+    const { data: drivers } = await supabase.from('profiles').select('*').eq('role', 'chauffeur').order('solde_wallet', { ascending: false });
+    let totalWallets = 0;
+    
+    if (drivers) {
+      setChauffeurs(drivers);
+      drivers.forEach(d => { totalWallets += (d.solde_wallet || 0); });
+    }
+    
+    setStatsCompta({ volumeGlobal, commissionYamoh, totalBillets, totalWallets });
     setLoadingCompta(false);
   };
 
-  // --- RENDU CONDITIONNEL ---
+  // --- RECHARGER UN WALLET MANUELLEMENT ---
+  const handleRechargerWallet = async (chauffeur: any) => {
+    const montantStr = window.prompt(`Entrez le montant à recharger pour ${chauffeur.full_name} (en FCFA) :`);
+    if (!montantStr) return;
+    
+    const montant = parseInt(montantStr, 10);
+    if (isNaN(montant) || montant <= 0) {
+      alert("Montant invalide.");
+      return;
+    }
+
+    const nouveauSolde = (chauffeur.solde_wallet || 0) + montant;
+
+    const { error } = await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', chauffeur.id);
+    
+    if (error) {
+      alert("Erreur lors de la recharge : " + error.message);
+    } else {
+      // Notification au chauffeur
+      await supabase.from('notifications').insert([{
+        user_id: chauffeur.id,
+        titre: "Recharge effectuée 💰",
+        message: `Votre portefeuille Yamoh a été crédité de ${montant} FCFA. Nouveau solde : ${nouveauSolde} FCFA.`,
+        type: 'systeme'
+      }]);
+      alert(`Recharge de ${montant} FCFA effectuée avec succès !`);
+      fetchCompta(); // Met à jour le tableau
+    }
+  };
+
   if (isAuthorized === null) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-yamo-teal font-black">VÉRIFICATION...</div>;
 
   if (!isAuthorized) {
@@ -193,12 +230,14 @@ export default function ERPAdmin() {
   }
 
   const filteredUsers = allUsers.filter(u => u.full_name?.toLowerCase().includes(globalSearch.toLowerCase()) || u.phone?.includes(globalSearch));
+  const filteredChauffeurs = chauffeurs.filter(c => c.full_name?.toLowerCase().includes(globalSearch.toLowerCase()) || c.phone?.includes(globalSearch));
+  
   const menuTitles: any = {
     dashboard: { title: "Vue d'ensemble", desc: "Statistiques globales de Yamoh." },
     kyc: { title: "Centre de Vérification KYC", desc: "Validez les documents d'identité pour sécuriser la plateforme." },
     live: { title: "Trajets en direct", desc: "Suivez l'activité des covoiturages d'aujourd'hui." },
     users: { title: "Base Utilisateurs", desc: "Gérez tous les membres inscrits sur Yamoh." },
-    compta: { title: "Comptabilité & Finances", desc: "Suivi des revenus, commissions et paiements (10% Yamoh)." }
+    compta: { title: "Comptabilité & Wallets", desc: "Gérez les recharges des chauffeurs et suivez les revenus." }
   };
 
   return (
@@ -246,7 +285,7 @@ export default function ERPAdmin() {
              </div>
              <div className="bg-gray-900 p-8 rounded-[2rem] shadow-xl text-white flex items-center gap-6">
                 <div className="bg-white/10 p-5 rounded-full text-white"><TrendingUp size={32}/></div>
-                <div><p className="text-gray-400 font-bold uppercase text-xs">Revenu Yamoh</p><p className="text-3xl font-black">{statsCompta.commission.toLocaleString()} F</p></div>
+                <div><p className="text-gray-400 font-bold uppercase text-xs">Revenu Yamoh</p><p className="text-3xl font-black">{statsCompta.commissionYamoh.toLocaleString()} F</p></div>
              </div>
           </div>
         )}
@@ -365,23 +404,59 @@ export default function ERPAdmin() {
                  <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-bl-full pointer-events-none"></div>
                  <div className="w-12 h-12 bg-white/10 text-yamo-teal rounded-full flex items-center justify-center mb-4"><TrendingUp size={24}/></div>
                  <p className="text-gray-400 font-bold uppercase text-xs tracking-wider mb-1">Chiffre d'Affaires Yamoh (10%)</p>
-                 <p className="text-4xl font-black text-yamo-teal">{statsCompta.commission.toLocaleString()} <span className="text-lg text-white">FCFA</span></p>
+                 <p className="text-4xl font-black text-yamo-teal">{statsCompta.commissionYamoh.toLocaleString()} <span className="text-lg text-white">FCFA</span></p>
                </div>
 
                <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
-                 <div className="w-12 h-12 bg-yamo-orange/10 text-yamo-orange rounded-full flex items-center justify-center mb-4"><DollarSign size={24}/></div>
-                 <p className="text-gray-500 font-bold uppercase text-xs tracking-wider mb-1">À reverser aux chauffeurs</p>
-                 <p className="text-3xl font-black text-gray-900">{statsCompta.aReverser.toLocaleString()} <span className="text-lg">FCFA</span></p>
+                 <div className="w-12 h-12 bg-yamo-orange/10 text-yamo-orange rounded-full flex items-center justify-center mb-4"><Wallet size={24}/></div>
+                 <p className="text-gray-500 font-bold uppercase text-xs tracking-wider mb-1">Total Soldes Chauffeurs</p>
+                 <p className="text-3xl font-black text-gray-900">{statsCompta.totalWallets.toLocaleString()} <span className="text-lg">FCFA</span></p>
                </div>
              </div>
 
-             {/* GRAPH/LISTE INFO */}
-             <div className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl font-black text-gray-900 mb-2">Cycle de facturation</h3>
-                  <p className="text-gray-500">Les revenus sont calculés sur la base de <strong>{statsCompta.totalBillets} billets scannés</strong> avec succès.</p>
+             {/* GESTION DES WALLETS CHAUFFEURS */}
+             <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-6 border-b border-gray-100">
+                  <h3 className="text-xl font-black text-gray-900">Portefeuilles Chauffeurs</h3>
+                  <p className="text-gray-500 text-sm mt-1">Rechargez les comptes suite aux paiements Mobile Money.</p>
                 </div>
-                <button className="bg-yamo-teal text-white font-bold px-6 py-3 rounded-xl shadow-lg hover:bg-[#115566] transition">Générer le rapport Excel</button>
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
+                      <th className="p-6">Chauffeur</th>
+                      <th className="p-6">Contact</th>
+                      <th className="p-6">Solde Wallet</th>
+                      <th className="p-6 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredChauffeurs.map(c => (
+                      <tr key={c.id} className="hover:bg-gray-50/50 transition">
+                        <td className="p-6 flex items-center gap-4">
+                          <div className="w-10 h-10 bg-gray-100 font-black rounded-full flex items-center justify-center text-gray-700">{c.full_name?.charAt(0) || '?'}</div>
+                          <p className="font-bold">{c.full_name}</p>
+                        </td>
+                        <td className="p-6 font-medium text-sm text-gray-600">{c.phone}</td>
+                        <td className="p-6">
+                          <span className={`font-black text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {c.solde_wallet || 0} FCFA
+                          </span>
+                        </td>
+                        <td className="p-6 text-right">
+                          <button 
+                            onClick={() => handleRechargerWallet(c)}
+                            className="bg-yamo-teal/10 text-yamo-teal hover:bg-yamo-teal hover:text-white font-bold px-4 py-2 rounded-xl transition flex items-center gap-2 ml-auto"
+                          >
+                            <PlusCircle size={16}/> Recharger
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredChauffeurs.length === 0 && (
+                      <tr><td colSpan={4} className="p-8 text-center text-gray-400 font-bold">Aucun chauffeur trouvé.</td></tr>
+                    )}
+                  </tbody>
+               </table>
              </div>
            </div>
         )}
