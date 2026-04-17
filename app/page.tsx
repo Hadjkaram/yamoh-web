@@ -323,75 +323,78 @@ export default function Home() {
         </div>
 
         {loadingTrips ? (
-          // SQUELETTE DE CHARGEMENT
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map(i => (
               <div key={i} className="bg-gray-50 rounded-[2.5rem] h-64 animate-pulse border border-gray-100"></div>
             ))}
           </div>
         ) : liveTrips.length > 0 ? (
-          // LISTE DES TRAJETS RÉELS
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {liveTrips.map((trip) => (
-              <div key={trip.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
-                
-                {/* En-tête : Date et Heure */}
-                <div className="flex justify-between items-center border-b border-gray-50 pb-4 mb-4">
-                  <div className="flex items-center gap-2 text-yamo-teal font-bold bg-yamo-teal/10 px-3 py-1.5 rounded-xl text-sm">
-                    <Calendar size={16} />
-                    <span className="capitalize">{formatDate(trip.date_depart)}</span>
-                  </div>
-                  {trip.heure_depart && (
-                    <div className="flex items-center gap-1.5 text-yamo-orange font-black">
-                      <Clock size={16} />
-                      {trip.heure_depart.substring(0, 5)}
-                    </div>
-                  )}
-                </div>
-
-                {/* Corps : Départ / Arrivée */}
-                <div className="flex gap-4 mb-6 relative">
-                  <div className="flex flex-col items-center mt-1">
-                    <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
-                    <div className="w-0.5 h-10 bg-gray-200 my-1"></div>
-                    <div className="w-3.5 h-3.5 rounded-full border-[3px] border-yamo-orange"></div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-900 text-lg mb-4 line-clamp-1">{trip.depart.split(',')[0]}</p>
-                    <p className="font-bold text-gray-900 text-lg line-clamp-1">{trip.destination.split(',')[0]}</p>
-                  </div>
-                </div>
-
-                {/* Footer : Chauffeur & Réservation */}
-                <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black">
-                      {trip.conducteur_nom ? trip.conducteur_nom.charAt(0).toUpperCase() : 'C'}
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-900 text-sm">{trip.conducteur_nom || "Conducteur"}</p>
-                      <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                        <Users size={12}/> {trip.places_disponibles} places
-                      </p>
-                    </div>
-                  </div>
+            {liveTrips.map((trip) => {
+              // On nettoie les adresses pour l'URL en ne gardant que la ville/quartier
+              const lienDepart = trip.depart ? encodeURIComponent(trip.depart.split(',')[0]) : "";
+              const lienDest = trip.destination ? encodeURIComponent(trip.destination.split(',')[0]) : "";
+              const lienDate = trip.date_depart ? trip.date_depart.split('T')[0] : "";
+              
+              return (
+                <div key={trip.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
                   
-                  <div className="flex flex-col items-end">
-                    <p className="text-2xl font-black text-yamo-teal">{trip.prix} <span className="text-sm font-bold">FCFA</span></p>
-                    {/* Le bouton redirige vers la recherche pré-remplie pour commander */}
-                    <Link href={`/recherche?depart=${encodeURIComponent(trip.depart)}&destination=${encodeURIComponent(trip.destination)}&date=${trip.date_depart}&passagers=1`}>
-                      <button className="mt-2 text-sm bg-gray-50 text-yamo-teal font-bold px-4 py-2 rounded-xl group-hover:bg-yamo-teal group-hover:text-white transition">
-                        Réserver
-                      </button>
-                    </Link>
+                  {/* En-tête : Date et Heure */}
+                  <div className="flex justify-between items-center border-b border-gray-50 pb-4 mb-4">
+                    <div className="flex items-center gap-2 text-yamo-teal font-bold bg-yamo-teal/10 px-3 py-1.5 rounded-xl text-sm">
+                      <Calendar size={16} />
+                      <span className="capitalize">{formatDate(trip.date_depart)}</span>
+                    </div>
+                    {trip.heure_depart && (
+                      <div className="flex items-center gap-1.5 text-yamo-orange font-black">
+                        <Clock size={16} />
+                        {trip.heure_depart.substring(0, 5)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Corps : Départ / Arrivée */}
+                  <div className="flex gap-4 mb-6 relative">
+                    <div className="flex flex-col items-center mt-1">
+                      <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
+                      <div className="w-0.5 h-10 bg-gray-200 my-1"></div>
+                      <div className="w-3.5 h-3.5 rounded-full border-[3px] border-yamo-orange"></div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-gray-900 text-lg mb-4 line-clamp-1">{trip.depart.split(',')[0]}</p>
+                      <p className="font-bold text-gray-900 text-lg line-clamp-1">{trip.destination.split(',')[0]}</p>
+                    </div>
+                  </div>
+
+                  {/* Footer : Chauffeur & Réservation */}
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black">
+                        {trip.conducteur_nom ? trip.conducteur_nom.charAt(0).toUpperCase() : 'C'}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 text-sm">{trip.conducteur_nom || "Conducteur"}</p>
+                        <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                          <Users size={12}/> {trip.places_disponibles} places
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col items-end">
+                      <p className="text-2xl font-black text-yamo-teal">{trip.prix} <span className="text-sm font-bold">FCFA</span></p>
+                      {/* LE LIEN EST MAINTENANT NETTOYÉ */}
+                      <Link href={`/recherche?depart=${lienDepart}&destination=${lienDest}&date=${lienDate}&passagers=1`}>
+                        <button className="mt-2 text-sm bg-gray-50 text-yamo-teal font-bold px-4 py-2 rounded-xl group-hover:bg-yamo-teal group-hover:text-white transition">
+                          Réserver
+                        </button>
+                      </Link>
+                    </div>
                   </div>
                 </div>
-
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
-          // MESSAGE SI AUCUN TRAJET
           <div className="bg-[#E8F4F8] rounded-[3rem] p-12 text-center border border-yamo-teal/10">
             <Car size={64} className="mx-auto text-yamo-teal opacity-50 mb-4" />
             <h3 className="text-2xl font-black text-gray-900 mb-2">Soyez le premier à publier !</h3>
