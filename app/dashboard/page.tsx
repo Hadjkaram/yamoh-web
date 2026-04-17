@@ -26,7 +26,7 @@ export default function DashboardConducteur() {
   const [ratingModal, setRatingModal] = useState<any>(null);
   const [passengerModal, setPassengerModal] = useState<any>(null); 
   
-  // NOUVEAU : MODAL DE CONFIRMATION DESIGN (Remplace le vieux window.confirm)
+  // NOUVEAU : MODAL DE CONFIRMATION DESIGN
   const [confirmDialog, setConfirmDialog] = useState<{titre: string, message: string, actionTexte: string, onConfirm: () => void} | null>(null);
 
   // ÉTATS POUR LA NOTATION
@@ -64,14 +64,14 @@ export default function DashboardConducteur() {
     fetchDashboardData();
   }, [router]);
 
-  // --- SUPPRIMER TOUT LE TRAJET (AVEC NOUVEAU POP-UP) ---
+  // --- SUPPRIMER TOUT LE TRAJET ---
   const supprimerTrajet = (trajetId: string) => {
     setConfirmDialog({
       titre: "Supprimer le trajet ?",
       message: "Cette action est irréversible et annulera toutes les réservations associées.",
       actionTexte: "Oui, supprimer",
       onConfirm: async () => {
-        setConfirmDialog(null); // On ferme le popup
+        setConfirmDialog(null);
         try {
           const { error } = await supabase.from('trajets').delete().eq('id', trajetId);
           if (error) throw error;
@@ -83,14 +83,14 @@ export default function DashboardConducteur() {
     });
   };
 
-  // --- REFUSER UN PASSAGER (AVEC NOUVEAU POP-UP) ---
+  // --- REFUSER UN PASSAGER ---
   const handleRefuserPassager = (resa: any, trajet: any) => {
     setConfirmDialog({
       titre: "Refuser ce passager ?",
       message: `Voulez-vous vraiment refuser ${resa.passager_nom} ? Ses places vous seront restituées.`,
       actionTexte: "Oui, refuser",
       onConfirm: async () => {
-        setConfirmDialog(null); // On ferme la confirmation
+        setConfirmDialog(null);
         
         // 1. Suppression
         await supabase.from('reservations').delete().eq('id', resa.id);
@@ -112,8 +112,8 @@ export default function DashboardConducteur() {
           }]);
         }
 
-        setPassengerModal(null); // On ferme le profil passager
-        fetchDashboardData(); // On rafraichit
+        setPassengerModal(null);
+        fetchDashboardData();
       }
     });
   };
@@ -145,19 +145,50 @@ export default function DashboardConducteur() {
     setIsScanning(false);
   };
 
+  // --- LA MAGIE OPÈRE ICI : PRÉLÈVEMENT AUTOMATIQUE ---
   const validerBillet = async (reservationId: string) => {
+    // 1. On récupère la réservation ET le prix du trajet
     const { data, error } = await supabase
       .from('reservations')
-      .select('id, statut, passager_nom, trajet_id')
+      .select('id, statut, passager_nom, trajet_id, places_reservees, trajets(prix)')
       .eq('id', reservationId)
       .single();
 
     if (error || !data) { alert("❌ QR Code invalide."); return; }
     if (data.statut === 'valide') { alert(`⚠️ Billet déjà validé pour ${data.passager_nom} !`); return; }
 
-    await supabase.from('reservations').update({ statut: 'valide' }).eq('id', reservationId);
-    fetchDashboardData();
+    // 2. Calculs Financiers
+    const prixUnitaire = data.trajets?.prix || 0;
+    const places = data.places_reservees || 1;
+    const prixTotal = prixUnitaire * places;
+    const commissionYamoh = prixTotal * 0.10; // Yamoh prend 10%
 
+    // 3. Récupérer le solde actuel du chauffeur
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('solde_wallet')
+      .eq('id', user.id)
+      .single();
+      
+    const soldeActuel = profile?.solde_wallet || 0;
+
+    // 4. On passe le billet en "Valide"
+    await supabase.from('reservations').update({ statut: 'valide' }).eq('id', reservationId);
+
+    // 5. On prélève la commission du Wallet
+    await supabase.from('profiles').update({ solde_wallet: soldeActuel - commissionYamoh }).eq('id', user.id);
+
+    // 6. On crée la facture dans l'historique pour la transparence
+    await supabase.from('paiements').insert([{
+      user_id: user.id,
+      montant: commissionYamoh,
+      type: 'depense',
+      methode: 'Wallet Yamoh',
+      libelle: `Commission (10%) - ${data.passager_nom}`
+    }]);
+
+    // 7. On rafraîchit l'écran et on note le client
+    fetchDashboardData();
     setRatingModal({ ...data, titre: `Billet validé pour ${data.passager_nom} !` });
   };
 
@@ -366,7 +397,7 @@ export default function DashboardConducteur() {
         </div>
       )}
 
-      {/* --- LE MODAL DE NOTATION (APPARAÎT APRÈS LE SCAN) --- */}
+      {/* --- LE MODAL DE NOTATION --- */}
       {ratingModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-md relative animate-in zoom-in duration-300">

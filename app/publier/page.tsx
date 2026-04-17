@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Car, User, Coins, MapPin, History, Calendar, Clock, PartyPopper, CalendarDays, Repeat, Snowflake, Briefcase } from "lucide-react";
+import { 
+  ArrowLeft, CheckCircle2, Car, User, Coins, MapPin, History, 
+  Calendar, Clock, PartyPopper, CalendarDays, Repeat, Snowflake, 
+  Briefcase, AlertCircle, Wallet 
+} from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -95,7 +99,7 @@ const JOURS_SEMAINE = [
 export default function PublierTrajet() {
   const router = useRouter();
   
-  // NOUVEAUX ÉTATS GLOBAUX
+  // ÉTATS GLOBAUX
   const [typeTrajet, setTypeTrajet] = useState<"quotidien" | "evenement">("quotidien");
   const [isRecurring, setIsRecurring] = useState(false);
   const [joursReguliers, setJoursReguliers] = useState<string[]>([]);
@@ -114,6 +118,7 @@ export default function PublierTrajet() {
   const [lieuRdv, setLieuRdv] = useState("");
   
   const [user, setUser] = useState<any>(null);
+  const [solde, setSolde] = useState<number | null>(null); // NOUVEAU : Suivi du solde
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
@@ -124,8 +129,16 @@ export default function PublierTrajet() {
         router.push('/connexion'); 
       } else {
         setUser(session.user);
-        const { data: profileData } = await supabase.from('profiles').select('vehicule_marque, vehicule_couleur, vehicule_plaque').eq('id', session.user.id).single();
+        
+        // NOUVEAU : On récupère les infos du véhicule ET le solde du wallet
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('vehicule_marque, vehicule_couleur, solde_wallet')
+          .eq('id', session.user.id)
+          .single();
+          
         if (profileData) {
+          setSolde(profileData.solde_wallet || 0);
           const infosVehicule = [profileData.vehicule_marque, profileData.vehicule_couleur].filter(Boolean).join(" - ");
           if (infosVehicule) setVehicule(infosVehicule);
         }
@@ -140,6 +153,13 @@ export default function PublierTrajet() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // SÉCURITÉ WALLET : On bloque si le solde est trop bas
+    if (solde !== null && solde < 100) {
+        alert("Action impossible : Votre solde Yamoh est insuffisant pour publier un trajet.");
+        return;
+    }
+
     setLoading(true);
 
     const { error } = await supabase
@@ -149,7 +169,6 @@ export default function PublierTrajet() {
           depart, destination, prix: parseInt(prix), places_disponibles: parseInt(places),
           conducteur_nom: user?.user_metadata?.full_name || "Conducteur",
           vehicule, user_id: user?.id, date_depart: dateDepart, heure_depart: heureDepart, lieu_rendez_vous: lieuRdv,
-          // NOUVELLES COLONNES
           type_trajet: typeTrajet,
           nom_evenement: typeTrajet === 'evenement' ? nomEvenement : null,
           jours_reguliers: isRecurring ? joursReguliers.join(',') : null,
@@ -180,6 +199,9 @@ export default function PublierTrajet() {
     );
   }
 
+  // SÉCURITÉ VISUELLE : Le solde est-il suffisant ?
+  const isSoldeInsuffisant = solde !== null && solde < 100;
+
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col font-sans pb-12">
       <header className="px-6 py-4 bg-white shadow-sm flex items-center justify-between sticky top-0 z-50">
@@ -190,6 +212,22 @@ export default function PublierTrajet() {
       </header>
 
       <div className="p-4 md:p-8 max-w-2xl mx-auto w-full mt-4">
+        
+        {/* ALERTE SOLDE INSUFFISANT */}
+        {isSoldeInsuffisant && (
+          <div className="bg-red-50 border-2 border-red-100 p-6 rounded-[2rem] mb-8 animate-in slide-in-from-top-4">
+            <div className="flex items-start gap-4">
+              <div className="bg-red-500 text-white p-2 rounded-full"><AlertCircle size={24}/></div>
+              <div className="flex-1">
+                <h3 className="font-black text-red-900 text-lg">Votre solde est vide !</h3>
+                <p className="text-red-700 font-medium text-sm mt-1">Vous devez recharger votre compte Yamoh pour pouvoir publier des annonces et recevoir des passagers.</p>
+                <Link href="/paiements" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm mt-4 hover:bg-red-600 transition shadow-lg shadow-red-500/20">
+                  <Wallet size={16}/> Recharger maintenant
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* SÉLECTEUR DU TYPE DE TRAJET */}
         <div className="flex gap-4 mb-6">
@@ -209,14 +247,14 @@ export default function PublierTrajet() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-8">
+        <form onSubmit={handleSubmit} className={`bg-white p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-8 ${isSoldeInsuffisant ? 'opacity-50 pointer-events-none' : ''}`}>
           
           {/* SECTION SPÉCIFIQUE ÉVÉNEMENT */}
           {typeTrajet === "evenement" && (
             <div className="bg-purple-50 border border-purple-100 p-6 rounded-[2rem] animate-in fade-in slide-in-from-top-4">
               <h3 className="font-black text-purple-900 mb-2 flex items-center gap-2"><PartyPopper size={20}/> Détails de l'événement</h3>
               <p className="text-purple-700 text-sm mb-4 font-medium">Concert, match de la CAN, festival... Proposez un covoiturage dédié !</p>
-              <input type="text" required placeholder="Nom de l'événement (ex: Concert au Palais de la Culture)" className="w-full bg-white p-4 rounded-xl border border-purple-200 outline-none focus:border-purple-600 font-bold text-gray-800" value={nomEvenement} onChange={(e) => setNomEvenement(e.target.value)} />
+              <input type="text" required={typeTrajet === 'evenement'} placeholder="Nom de l'événement (ex: Concert au Palais de la Culture)" className="w-full bg-white p-4 rounded-xl border border-purple-200 outline-none focus:border-purple-600 font-bold text-gray-800" value={nomEvenement} onChange={(e) => setNomEvenement(e.target.value)} />
             </div>
           )}
 
@@ -242,7 +280,6 @@ export default function PublierTrajet() {
               <h3 className="font-black text-gray-900 flex items-center gap-2"><Calendar size={20} className="text-yamo-teal"/> Programmation</h3>
             </div>
 
-            {/* Choix Unique / Régulier (Uniquement dispo pour les trajets quotidiens) */}
             {typeTrajet === "quotidien" && (
               <div className="flex bg-gray-50 p-1 rounded-2xl mb-6 border border-gray-100">
                 <button type="button" onClick={() => setIsRecurring(false)} className={`flex-1 py-3 text-sm font-black rounded-xl transition ${!isRecurring ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Trajet Unique</button>
@@ -283,13 +320,12 @@ export default function PublierTrajet() {
 
           <hr className="border-gray-100" />
 
-          {/* SECTION 3 : VÉHICULE & OPTIONS (CLIM / BAGAGES) */}
+          {/* SECTION 3 : VÉHICULE & OPTIONS */}
           <div>
             <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2"><Car size={20} className="text-yamo-teal"/> Détails & Confort</h3>
             
             <input type="text" required placeholder="Votre Véhicule (ex: Toyota Corolla)" className="bg-gray-50 w-full p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal text-lg font-medium mb-4" value={vehicule} onChange={(e) => setVehicule(e.target.value)} />
             
-            {/* LES NOUVELLES OPTIONS DE CONFORT */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <button type="button" onClick={() => setClimatise(!climatise)} className={`p-4 rounded-2xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${climatise ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'}`}>
                 <Snowflake size={24} className={climatise ? 'animate-pulse' : ''} />
@@ -315,10 +351,15 @@ export default function PublierTrajet() {
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className={`w-full text-white font-black text-xl py-5 rounded-[1.5rem] shadow-xl transition duration-300 mt-2 ${loading ? 'bg-gray-300' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
+          <button type="submit" disabled={loading || isSoldeInsuffisant} className={`w-full text-white font-black text-xl py-5 rounded-[1.5rem] shadow-xl transition duration-300 mt-2 ${loading ? 'bg-gray-300' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
             {loading ? "Chargement..." : "Publier mon annonce"}
           </button>
         </form>
+        
+        {/* MESSAGE SI BLOQUÉ */}
+        {isSoldeInsuffisant && (
+            <p className="text-center text-gray-400 font-bold mt-6 italic">Rechargez votre portefeuille pour débloquer ce formulaire.</p>
+        )}
       </div>
     </main>
   );
