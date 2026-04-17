@@ -347,7 +347,7 @@ function RechercheContent() {
         </div>
       )}
 
-      {/* MODAL PROFIL CONDUCTEUR (COMPLÈTEMENT MIS À JOUR) */}
+      {/* MODAL PROFIL CONDUCTEUR (NETTOYÉ) */}
       {viewingProfile && !showSuccess && !bookingModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
@@ -363,37 +363,32 @@ function RechercheContent() {
               </div>
               <h3 className="text-2xl font-black text-gray-900">{viewingProfile.full_name}</h3>
               
-              {/* NOUVEAU : SYSTÈME D'ÉTOILES */}
+              {/* SYSTÈME D'ÉTOILES */}
               <div className="flex items-center gap-1 text-yamo-orange mt-2 mb-2">
                 <Star size={18} className={driverRating?.count && driverRating.count > 0 ? "fill-current" : ""} />
                 <span className="font-bold text-gray-800">{driverRating?.count && driverRating.count > 0 ? driverRating.note : 'Nouveau'}</span>
                 <span className="text-gray-400 text-sm ml-1">({driverRating?.count || 0} avis)</span>
               </div>
-
-              <p className="text-yamo-orange font-bold flex items-center gap-2 mt-1"><Phone size={18} /> {viewingProfile.phone || "Non renseigné"}</p>
             </div>
 
-            <div className="bg-gray-50 p-6 rounded-2xl mb-6 italic text-gray-600 text-center leading-relaxed border border-gray-100">"{viewingProfile.bio || "Pas de bio disponible."}"</div>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-               <div className={`flex flex-col items-center p-4 rounded-2xl border-2 transition ${viewingProfile.preferences?.music ? 'border-yamo-teal bg-[#E8F4F8] text-yamo-teal' : 'border-gray-100 text-gray-300'}`}>
-                 <Music size={24} className="mb-2"/> <span className="text-xs font-black uppercase">Musique</span>
-               </div>
-               <div className={`flex flex-col items-center p-4 rounded-2xl border-2 transition ${viewingProfile.preferences?.chat ? 'border-yamo-teal bg-[#E8F4F8] text-yamo-teal' : 'border-gray-100 text-gray-300'}`}>
-                 <MessageSquare size={24} className="mb-2"/> <span className="text-xs font-black uppercase">Discussion</span>
-               </div>
+            <div className="bg-gray-50 p-6 rounded-2xl mb-8 italic text-gray-600 text-center leading-relaxed border border-gray-100">
+              "{viewingProfile.bio || "Conducteur Yamoh"}"
             </div>
 
-            {/* NOUVEAU : BOUTON APPEL + MESSAGE */}
-            <div className="flex flex-col gap-3">
+            {/* BOUTONS DE CONTACT DIRECTS (APPEL + MESSAGE) */}
+            <div className="flex flex-col gap-4">
               {viewingProfile.phone ? (
                 <a 
                   href={`tel:${viewingProfile.phone.replace(/\s+/g, '')}`} 
                   className="w-full bg-yamo-orange text-white font-black py-4 rounded-2xl hover:bg-[#D55A1A] transition shadow-lg shadow-yamo-orange/20 flex items-center justify-center gap-2"
                 >
-                  <Phone size={20} /> Appeler le conducteur
+                  <Phone size={20} /> Appeler le {viewingProfile.phone}
                 </a>
-              ) : null}
+              ) : (
+                 <div className="w-full bg-gray-100 text-gray-400 font-black py-4 rounded-2xl flex items-center justify-center gap-2 cursor-not-allowed">
+                  <Phone size={20} /> Numéro indisponible
+                </div>
+              )}
 
               <button onClick={() => handleContact(viewingProfile.id, viewingProfile.trajetId)} disabled={contactLoading} className="w-full bg-white border-2 border-yamo-teal text-yamo-teal font-black py-4 rounded-2xl hover:bg-yamo-teal hover:text-white transition flex items-center justify-center gap-2">
                 <MessageSquare size={20} /> {contactLoading ? "Connexion..." : "Envoyer un message"}
