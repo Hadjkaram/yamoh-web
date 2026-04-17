@@ -2,22 +2,33 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Mail, Lock, User as UserIcon, Phone, Calendar, Users } from "lucide-react";
+import { ArrowLeft, Lock, User as UserIcon, Phone, Calendar, Users, Car } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function Connexion() {
   const router = useRouter();
   
+  // États de navigation dans le formulaire
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState("");
+  const [roleSelection, setRoleSelection] = useState(false); // Affiche l'écran de choix de rôle
+  const [role, setRole] = useState<"passager" | "chauffeur">("passager");
+
+  // Infos de base (Le téléphone remplace l'email comme demandé précédemment)
+  const [phoneInput, setPhoneInput] = useState("");
   const [password, setPassword] = useState("");
   
-  // Nouveaux champs pour l'inscription
+  // Infos Inscription
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [gender, setGender] = useState("");
+
+  // Infos spécifiques Chauffeur
+  const [vehiculeMarque, setVehiculeMarque] = useState("");
+  const [vehiculeCouleur, setVehiculeCouleur] = useState("");
+  const [vehiculePlaque, setVehiculePlaque] = useState("");
+  const [permisNumero, setPermisNumero] = useState("");
+  const [carteGriseNumero, setCarteGriseNumero] = useState("");
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -27,26 +38,43 @@ export default function Connexion() {
     setLoading(true);
     setErrorMsg("");
 
+    const formattedPhone = phoneInput.replace(/\s+/g, '');
+
     if (isLogin) {
+      // --- CONNEXION ---
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        phone: formattedPhone,
         password,
       });
-      if (error) setErrorMsg(error.message);
+      if (error) setErrorMsg("Numéro ou mot de passe incorrect.");
       else router.push("/");
       
     } else {
-      // --- INSCRIPTION AVEC DONNÉES COMPLÈTES ---
+      // --- INSCRIPTION ---
+      let finalPhone = formattedPhone;
+      if (!finalPhone.startsWith('+')) {
+        finalPhone = '+225' + finalPhone;
+      }
+
       const { data, error } = await supabase.auth.signUp({
-        email,
+        phone: finalPhone,
         password,
         options: {
           data: {
             full_name: name,
-            phone: phone,
+            phone: finalPhone,
             birth_date: birthDate,
             gender: gender,
-            verification_status: 'non_verifie' // Statut initial
+            role: role,
+            verification_status: 'non_verifie',
+            // Si c'est un chauffeur, on sauvegarde les infos de la voiture
+            ...(role === 'chauffeur' && {
+              vehicule_marque: vehiculeMarque,
+              vehicule_couleur: vehiculeCouleur,
+              vehicule_plaque: vehiculePlaque,
+              permis_numero: permisNumero,
+              carte_grise_numero: carteGriseNumero
+            })
           }
         }
       });
@@ -54,31 +82,74 @@ export default function Connexion() {
       if (error) {
         setErrorMsg(error.message);
       } else {
-        alert("Compte créé ! Passons maintenant à la vérification de votre identité.");
-        // Redirection directe vers la vérification après inscription
+        alert("Compte créé avec succès ! Passons à la vérification de vos documents.");
+        // On passe à la page de vérification d'identité
         router.push("/verif-identite");
       }
     }
     setLoading(false);
   };
 
+  // ÉCRAN 1 : CHOIX DU RÔLE POUR L'INSCRIPTION
+  if (roleSelection) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex flex-col font-sans">
+        <header className="px-6 py-4 bg-white shadow-sm flex items-center gap-4">
+          <button onClick={() => setRoleSelection(false)}><ArrowLeft size={24} className="text-gray-600 hover:text-black" /></button>
+          <h1 className="text-xl font-bold text-yamo-teal">yamoh</h1>
+        </header>
+
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto w-full">
+          <h2 className="text-3xl font-black text-gray-900 mb-2">Comment voulez-vous utiliser Yamoh ?</h2>
+          <p className="text-gray-500 mb-10">Choisissez votre profil pour continuer l'inscription.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+            <div 
+              onClick={() => { setRole("passager"); setRoleSelection(false); setIsLogin(false); }}
+              className="bg-white border-2 border-gray-100 hover:border-yamo-teal p-8 rounded-[2rem] cursor-pointer transition shadow-sm hover:shadow-md flex flex-col items-center group"
+            >
+              <div className="bg-[#E8F4F8] p-5 rounded-full text-yamo-teal mb-4 group-hover:scale-110 transition">
+                <UserIcon size={40} />
+              </div>
+              <h3 className="font-black text-xl mb-2">Passager</h3>
+              <p className="text-gray-500 text-sm">Je cherche des trajets abordables.</p>
+            </div>
+
+            <div 
+              onClick={() => { setRole("chauffeur"); setRoleSelection(false); setIsLogin(false); }}
+              className="bg-white border-2 border-gray-100 hover:border-yamo-orange p-8 rounded-[2rem] cursor-pointer transition shadow-sm hover:shadow-md flex flex-col items-center group"
+            >
+              <div className="bg-[#FFF0E8] p-5 rounded-full text-yamo-orange mb-4 group-hover:scale-110 transition">
+                <Car size={40} />
+              </div>
+              <h3 className="font-black text-xl mb-2">Chauffeur</h3>
+              <p className="text-gray-500 text-sm">Je propose des trajets et je conduis.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // ÉCRAN 2 : FORMULAIRE DE CONNEXION / INSCRIPTION
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col font-sans">
       <header className="px-6 py-4 bg-white shadow-sm flex items-center gap-4">
-        <Link href="/">
-          <ArrowLeft size={24} className="text-gray-600 hover:text-black" />
-        </Link>
+        <Link href="/"><ArrowLeft size={24} className="text-gray-600 hover:text-black" /></Link>
         <h1 className="text-xl font-bold text-yamo-teal">yamoh</h1>
       </header>
 
       <div className="flex-1 flex items-center justify-center p-4 py-12">
-        <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-sm border border-gray-100">
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-6 text-center">
-            {isLogin ? "Bon retour !" : "Créez votre compte"}
-          </h2>
+        <div className="bg-white w-full max-w-xl p-8 rounded-[2rem] shadow-sm border border-gray-100">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-extrabold text-gray-900 mb-2">
+              {isLogin ? "Bon retour !" : (role === 'chauffeur' ? "Inscription Chauffeur" : "Inscription Passager")}
+            </h2>
+            {!isLogin && <p className="text-gray-500">Remplissez vos informations pour sécuriser votre compte.</p>}
+          </div>
 
           {errorMsg && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-4 text-sm text-center font-medium">
+            <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-sm text-center font-medium">
               {errorMsg}
             </div>
           )}
@@ -87,31 +158,14 @@ export default function Connexion() {
             
             {!isLogin && (
               <>
-                {/* NOM COMPLET */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-gray-600">Nom complet</label>
-                  <div className="relative flex items-center">
-                    <UserIcon size={20} className="absolute left-4 text-gray-400" />
-                    <input type="text" required placeholder="Ex: Ibrahim K." className="bg-gray-50 pl-12 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium" value={name} onChange={(e) => setName(e.target.value)} />
-                  </div>
-                </div>
-
-                {/* TÉLÉPHONE */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-gray-600">Numéro de téléphone</label>
-                  <div className="relative flex items-center">
-                    <Phone size={20} className="absolute left-4 text-gray-400" />
-                    <input type="tel" required placeholder="Ex: 07 00 00 00 00" className="bg-gray-50 pl-12 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                  </div>
-                </div>
-
-                {/* DATE DE NAISSANCE & GENRE */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* --- INFOS COMMUNES --- */}
+                <h3 className="font-bold text-lg border-b border-gray-100 pb-2 mt-2">Informations personnelles</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-bold text-gray-600">Naissance</label>
+                    <label className="text-sm font-bold text-gray-600">Nom complet</label>
                     <div className="relative flex items-center">
-                      <Calendar size={18} className="absolute left-4 text-gray-400 pointer-events-none" />
-                      <input type="date" required className="bg-gray-50 pl-11 pr-2 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium text-sm" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+                      <UserIcon size={18} className="absolute left-4 text-gray-400" />
+                      <input type="text" required placeholder="Ex: Amadou K." className="bg-gray-50 pl-11 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium text-sm" value={name} onChange={(e) => setName(e.target.value)} />
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -119,26 +173,70 @@ export default function Connexion() {
                     <div className="relative flex items-center">
                       <Users size={18} className="absolute left-4 text-gray-400 pointer-events-none" />
                       <select required className="bg-gray-50 pl-11 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium text-sm appearance-none" value={gender} onChange={(e) => setGender(e.target.value)}>
-                        <option value="">Genre</option>
+                        <option value="">Sélectionner</option>
                         <option value="M">Homme</option>
                         <option value="F">Femme</option>
                       </select>
                     </div>
                   </div>
                 </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-bold text-gray-600">Date de Naissance</label>
+                  <div className="relative flex items-center">
+                    <Calendar size={18} className="absolute left-4 text-gray-400 pointer-events-none" />
+                    <input type="date" required className="bg-gray-50 pl-11 pr-2 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium text-sm" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+                  </div>
+                </div>
+
+                {/* --- INFOS CHAUFFEUR (Affiché uniquement si rôle = chauffeur) --- */}
+                {role === 'chauffeur' && (
+                  <div className="mt-4 bg-[#FFF0E8] p-5 rounded-2xl border border-yamo-orange/20 space-y-4">
+                    <h3 className="font-bold text-lg border-b border-yamo-orange/20 pb-2 text-yamo-orange flex items-center gap-2">
+                      <Car size={20}/> Informations du Véhicule
+                    </h3>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-600">Marque & Modèle</label>
+                        <input type="text" required placeholder="Ex: Toyota Yaris" className="bg-white px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-orange w-full font-medium text-sm" value={vehiculeMarque} onChange={(e) => setVehiculeMarque(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-600">Couleur</label>
+                        <input type="text" required placeholder="Ex: Gris" className="bg-white px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-orange w-full font-medium text-sm" value={vehiculeCouleur} onChange={(e) => setVehiculeCouleur(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-bold text-gray-600">Plaque d'immatriculation</label>
+                      <input type="text" required placeholder="Ex: 1234 AB 01" className="bg-white px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-orange w-full font-medium uppercase tracking-widest text-sm" value={vehiculePlaque} onChange={(e) => setVehiculePlaque(e.target.value)} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-600">N° Permis de conduire</label>
+                        <input type="text" required placeholder="Numéro du permis" className="bg-white px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-orange w-full font-medium text-sm" value={permisNumero} onChange={(e) => setPermisNumero(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-600">N° Carte Grise</label>
+                        <input type="text" required placeholder="Numéro carte grise" className="bg-white px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-orange w-full font-medium text-sm" value={carteGriseNumero} onChange={(e) => setCarteGriseNumero(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <h3 className="font-bold text-lg border-b border-gray-100 pb-2 mt-4">Sécurité du compte</h3>
               </>
             )}
 
-            {/* EMAIL */}
+            {/* --- COMMUN : TÉLÉPHONE & MOT DE PASSE --- */}
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-bold text-gray-600">Adresse e-mail</label>
+              <label className="text-sm font-bold text-gray-600">Numéro de téléphone</label>
               <div className="relative flex items-center">
-                <Mail size={20} className="absolute left-4 text-gray-400" />
-                <input type="email" required placeholder="vous@email.com" className="bg-gray-50 pl-12 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Phone size={20} className="absolute left-4 text-gray-400" />
+                <input type="tel" required placeholder="Ex: 0700000000" className="bg-gray-50 pl-12 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-yamo-teal w-full font-medium tracking-wide" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} />
               </div>
             </div>
 
-            {/* MOT DE PASSE */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-bold text-gray-600">Mot de passe</label>
               <div className="relative flex items-center">
@@ -148,14 +246,16 @@ export default function Connexion() {
             </div>
 
             <button type="submit" disabled={loading} className={`w-full text-white font-black text-lg py-4 rounded-2xl mt-4 transition duration-300 shadow-lg ${loading ? 'bg-gray-400' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
-              {loading ? "Chargement..." : (isLogin ? "Se connecter" : "Suivant : Vérifier mon identité")}
+              {loading ? "Chargement..." : (isLogin ? "Se connecter" : "Valider mon inscription")}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <button onClick={() => setIsLogin(!isLogin)} className="text-yamo-orange font-bold hover:underline">
-              {isLogin ? "Pas encore de compte ? S'inscrire" : "Déjà un compte ? Se connecter"}
-            </button>
+          <div className="mt-8 text-center pt-6 border-t border-gray-100">
+            {isLogin ? (
+              <p className="text-gray-500">Nouveau sur Yamoh ? <button onClick={() => setRoleSelection(true)} className="text-yamo-orange font-bold hover:underline ml-1">Créer un compte</button></p>
+            ) : (
+              <p className="text-gray-500">Déjà inscrit ? <button onClick={() => { setIsLogin(true); setErrorMsg(""); }} className="text-yamo-teal font-bold hover:underline ml-1">Se connecter</button></p>
+            )}
           </div>
         </div>
       </div>
