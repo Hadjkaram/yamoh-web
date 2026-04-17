@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX, Calendar, MapPin, CheckCircle2, AlertCircle, Plus, Minus, Repeat } from "lucide-react";
+import { ArrowLeft, User, Car, Clock, Phone, MessageSquare, Music, X, SearchX, Calendar, MapPin, CheckCircle2, AlertCircle, Plus, Minus, Repeat, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, Suspense } from "react"; 
 import { supabase } from "@/lib/supabase";
@@ -22,10 +22,13 @@ function RechercheContent() {
   const [contactLoading, setContactLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // NOUVEAU : État pour stocker la note du chauffeur
+  const [driverRating, setDriverRating] = useState<{note: number, count: number} | null>(null);
+
   // ÉTATS POUR LE MODAL DE RÉSERVATION
   const [bookingModal, setBookingModal] = useState<any>(null);
   const [bookingPlaces, setBookingPlaces] = useState(1);
-  const [bookingType, setBookingType] = useState("unique"); // "unique" ou "semaine"
+  const [bookingType, setBookingType] = useState("unique");
   const [isReserving, setIsReserving] = useState(false);
 
   useEffect(() => {
@@ -83,9 +86,32 @@ function RechercheContent() {
     fetchTrajets();
   }, [depart, destination, dateRecherche]);
 
+  // NOUVEAU : Récupérer les avis quand on ouvre un profil
+  useEffect(() => {
+    async function fetchRating() {
+      if (!viewingProfile) return;
+      
+      const { data, error } = await supabase
+        .from('avis')
+        .select('note')
+        .eq('destinataire_id', viewingProfile.id);
+
+      if (data && data.length > 0) {
+        const avg = data.reduce((acc, curr) => acc + curr.note, 0) / data.length;
+        setDriverRating({ note: Math.round(avg * 10) / 10, count: data.length });
+      } else {
+        setDriverRating({ note: 0, count: 0 });
+      }
+    }
+    fetchRating();
+  }, [viewingProfile]);
+
   const handleContact = async (conducteurId: string, trajetId: string) => {
     if (!user) { alert("Connectez-vous pour envoyer un message."); router.push('/connexion'); return; }
+    
+    // C'EST ICI QUE ÇA BLOQUAIT DANS TA VIDÉO ! (Si tu es le chauffeur)
     if (user.id === conducteurId) { alert("C'est votre propre trajet !"); return; }
+    
     setContactLoading(true);
 
     let { data: conv } = await supabase.from('conversations').select('id').match({ trajet_id: trajetId, passager_id: user.id, conducteur_id: conducteurId }).maybeSingle();
@@ -104,7 +130,6 @@ function RechercheContent() {
       return;
     }
     setBookingModal(trajet);
-    // On présélectionne le nombre de places que le client avait cherché (max dispo)
     setBookingPlaces(Math.min(placesDemandeesInit, trajet.places_disponibles));
     setBookingType("unique");
   };
@@ -113,7 +138,6 @@ function RechercheContent() {
     if (!bookingModal) return;
     setIsReserving(true);
 
-    // 1. Enregistrement de la réservation AVEC le nombre de places et le type
     const { error: resaError } = await supabase
       .from('reservations')
       .insert([
@@ -133,11 +157,9 @@ function RechercheContent() {
       return;
     }
 
-    // 2. LE DÉCOMPTE INTELLIGENT
     const nouvellesPlaces = bookingModal.places_disponibles - bookingPlaces;
     await supabase.from('trajets').update({ places_disponibles: nouvellesPlaces }).eq('id', bookingModal.id);
 
-    // 3. Notification au conducteur
     if (bookingModal.user_id) {
       const msgSemaine = bookingType === 'semaine' ? " POUR TOUTE LA SEMAINE" : "";
       await supabase.from('notifications').insert([{
@@ -197,7 +219,6 @@ function RechercheContent() {
             
             {trajets.map((trajet) => {
               const isComplet = trajet.places_disponibles === 0;
-              const isNotEnoughSeats = !isComplet && trajet.places_disponibles < placesDemandeesInit;
 
               return (
                 <div key={trajet.id} className={`bg-white p-6 rounded-[2rem] shadow-sm border transition-all duration-300 group ${isComplet ? 'border-red-100 opacity-80' : 'border-gray-100 hover:shadow-xl hover:-translate-y-1'}`}>
@@ -236,8 +257,12 @@ function RechercheContent() {
 
                   <div onClick={() => setViewingProfile({ ...trajet.profiles, trajetId: trajet.id })} className="flex justify-between items-center mb-6 p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 cursor-pointer transition border border-gray-100">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white shadow-sm border border-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black text-lg">
-                        {trajet.conducteur_nom ? trajet.conducteur_nom.charAt(0).toUpperCase() : 'C'}
+                      <div className="w-12 h-12 bg-white shadow-sm border border-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black text-lg overflow-hidden">
+                        {trajet.profiles?.avatar_url ? (
+                           <img src={trajet.profiles.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                        ) : (
+                           trajet.conducteur_nom ? trajet.conducteur_nom.charAt(0).toUpperCase() : 'C'
+                        )}
                       </div>
                       <div>
                         <p className="font-bold text-gray-900">{trajet.conducteur_nom || "Conducteur"}</p>
@@ -252,10 +277,6 @@ function RechercheContent() {
                   {isComplet ? (
                     <button disabled className="w-full text-red-500 bg-red-50 border-2 border-red-100 font-black text-xl py-4 rounded-[1.5rem] flex items-center justify-center gap-2 cursor-not-allowed">
                       <AlertCircle size={20} /> Véhicule Complet
-                    </button>
-                  ) : isNotEnoughSeats ? (
-                    <button disabled className="w-full text-orange-500 bg-orange-50 border-2 border-orange-100 font-black text-lg py-4 rounded-[1.5rem] flex items-center justify-center gap-2 cursor-not-allowed">
-                      <AlertCircle size={20} /> Pas assez de places pour vous
                     </button>
                   ) : (
                     <button onClick={() => openBookingModal(trajet)} className="w-full text-white font-black text-xl py-4 rounded-[1.5rem] transition shadow-lg flex items-center justify-center gap-2 bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20">
@@ -277,7 +298,6 @@ function RechercheContent() {
             
             <h3 className="text-2xl font-black text-gray-900 mb-6">Détails réservation</h3>
             
-            {/* Sélecteur de places */}
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-6 flex justify-between items-center">
               <div>
                 <p className="font-bold text-gray-900">Combien de places ?</p>
@@ -290,7 +310,6 @@ function RechercheContent() {
               </div>
             </div>
 
-            {/* Choix d'abonnement semaine si trajet régulier */}
             {bookingModal.jours_reguliers && (
               <div className="mb-6">
                 <p className="font-bold text-gray-900 mb-3">Abonnement</p>
@@ -304,7 +323,6 @@ function RechercheContent() {
               </div>
             )}
 
-            {/* Total */}
             <div className="flex justify-between items-end border-t border-gray-100 pt-6 mb-6">
               <p className="text-gray-500 font-bold uppercase text-sm">Total par trajet</p>
               <p className="text-3xl font-black text-yamo-teal">{bookingModal.prix * bookingPlaces} <span className="text-lg">FCFA</span></p>
@@ -329,25 +347,48 @@ function RechercheContent() {
         </div>
       )}
 
-      {/* MODAL PROFIL CONDUCTEUR */}
+      {/* MODAL PROFIL CONDUCTEUR (COMPLÈTEMENT MIS À JOUR) */}
       {viewingProfile && !showSuccess && !bookingModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-6 backdrop-blur-sm" onClick={() => setViewingProfile(null)}>
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 relative animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
             <button onClick={() => setViewingProfile(null)} className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20}/></button>
             
             <div className="flex flex-col items-center text-center mb-6">
-              <div className="w-24 h-24 bg-[#E8F4F8] rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-sm font-black text-yamo-teal text-2xl">{viewingProfile.full_name?.charAt(0).toUpperCase()}</div>
+              <div className="w-24 h-24 bg-[#E8F4F8] rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-sm font-black text-yamo-teal text-2xl overflow-hidden">
+                {viewingProfile.avatar_url ? (
+                  <img src={viewingProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  viewingProfile.full_name?.charAt(0).toUpperCase()
+                )}
+              </div>
               <h3 className="text-2xl font-black text-gray-900">{viewingProfile.full_name}</h3>
+              
+              {/* NOUVEAU : SYSTÈME D'ÉTOILES */}
+              <div className="flex items-center gap-1 text-yamo-orange mt-2 mb-2">
+                <Star size={18} className={driverRating?.count && driverRating.count > 0 ? "fill-current" : ""} />
+                <span className="font-bold text-gray-800">{driverRating?.count && driverRating.count > 0 ? driverRating.note : 'Nouveau'}</span>
+                <span className="text-gray-400 text-sm ml-1">({driverRating?.count || 0} avis)</span>
+              </div>
+
               <p className="text-yamo-orange font-bold flex items-center gap-2 mt-1"><Phone size={18} /> {viewingProfile.phone || "Non renseigné"}</p>
             </div>
-            
+
             <div className="bg-gray-50 p-6 rounded-2xl mb-6 italic text-gray-600 text-center leading-relaxed border border-gray-100">"{viewingProfile.bio || "Pas de bio disponible."}"</div>
-            
-            {/* NOUVEAU : BOUTONS DE CONTACT (APPEL + MESSAGE) */}
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+               <div className={`flex flex-col items-center p-4 rounded-2xl border-2 transition ${viewingProfile.preferences?.music ? 'border-yamo-teal bg-[#E8F4F8] text-yamo-teal' : 'border-gray-100 text-gray-300'}`}>
+                 <Music size={24} className="mb-2"/> <span className="text-xs font-black uppercase">Musique</span>
+               </div>
+               <div className={`flex flex-col items-center p-4 rounded-2xl border-2 transition ${viewingProfile.preferences?.chat ? 'border-yamo-teal bg-[#E8F4F8] text-yamo-teal' : 'border-gray-100 text-gray-300'}`}>
+                 <MessageSquare size={24} className="mb-2"/> <span className="text-xs font-black uppercase">Discussion</span>
+               </div>
+            </div>
+
+            {/* NOUVEAU : BOUTON APPEL + MESSAGE */}
             <div className="flex flex-col gap-3">
               {viewingProfile.phone ? (
                 <a 
-                  href={`tel:${viewingProfile.phone}`} 
+                  href={`tel:${viewingProfile.phone.replace(/\s+/g, '')}`} 
                   className="w-full bg-yamo-orange text-white font-black py-4 rounded-2xl hover:bg-[#D55A1A] transition shadow-lg shadow-yamo-orange/20 flex items-center justify-center gap-2"
                 >
                   <Phone size={20} /> Appeler le conducteur
