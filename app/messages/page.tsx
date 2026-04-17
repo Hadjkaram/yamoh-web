@@ -19,7 +19,6 @@ export default function MessagesPage() {
       if (!session) return;
       setUserId(session.user.id);
 
-      // 1. ASTUCE INFAILLIBLE : On charge les conversations sans faire planter Supabase
       const { data: convData, error } = await supabase
         .from('conversations')
         .select('*')
@@ -32,7 +31,6 @@ export default function MessagesPage() {
       }
 
       if (convData && convData.length > 0) {
-        // 2. On récupère les trajets et les profils manuellement en JavaScript
         const trajetIds = [...new Set(convData.map(c => c.trajet_id).filter(Boolean))];
         const userIds = [...new Set(convData.flatMap(c => [c.passager_id, c.conducteur_id]).filter(Boolean))];
 
@@ -47,14 +45,12 @@ export default function MessagesPage() {
         }));
 
         setConversations(mergedConversations);
-        // 3. OUVRE DIRECTEMENT LA DERNIÈRE CONVERSATION POUR AFFICHER LA ZONE DE TEXTE
         setSelectedConv(mergedConversations[0]);
       }
     }
     init();
   }, []);
 
-  // Charger les messages et activer le temps réel
   useEffect(() => {
     if (!selectedConv) return;
 
@@ -69,13 +65,16 @@ export default function MessagesPage() {
 
     fetchMessages();
 
-    // ABONNEMENT REALTIME
     const channel = supabase
       .channel(`chat-${selectedConv.id}`)
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${selectedConv.id}` }, 
         (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
+          // ANTI-DOUBLON : On vérifie si on n'a pas déjà affiché ce message manuellement
+          setMessages((prev) => {
+            if (prev.some(m => m.id === payload.new.id)) return prev;
+            return [...prev, payload.new];
+          });
         }
       )
       .subscribe();
@@ -83,7 +82,6 @@ export default function MessagesPage() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedConv]);
 
-  // Scroll auto vers le bas à chaque nouveau message
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -93,17 +91,28 @@ export default function MessagesPage() {
     if (!newMessage.trim() || !userId || !selectedConv) return;
 
     const messageToSend = newMessage;
-    setNewMessage(""); // Vider le champ immédiatement pour la rapidité
+    setNewMessage(""); // On vide le champ pour que ce soit fluide
 
-    const { error } = await supabase.from('messages').insert([{
-      conversation_id: selectedConv.id,
-      sender_id: userId,
-      content: messageToSend
-    }]);
+    // 1. On insère dans la base ET on récupère la ligne générée (.select().single())
+    const { data, error } = await supabase
+      .from('messages')
+      .insert([{
+        conversation_id: selectedConv.id,
+        sender_id: userId,
+        content: messageToSend
+      }])
+      .select()
+      .single();
 
     if (error) {
       alert("Erreur d'envoi du message : " + error.message);
-      setNewMessage(messageToSend);
+      setNewMessage(messageToSend); // En cas d'erreur, on remet le texte dans le champ
+    } else if (data) {
+      // 2. AFFICHAGE INSTANTANÉ : On ajoute le message validé directement dans notre liste locale
+      setMessages((prev) => {
+        if (prev.some(m => m.id === data.id)) return prev;
+        return [...prev, data];
+      });
     }
   };
 
@@ -177,7 +186,6 @@ export default function MessagesPage() {
               <div ref={scrollRef} />
             </div>
 
-            {/* LA FAMEUSE ZONE DE TEXTE ET LE BOUTON D'ENVOI SONT LÀ */}
             <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-100 flex gap-2 items-center shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
               <input 
                 value={newMessage}
