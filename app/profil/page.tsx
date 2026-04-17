@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, User, Phone, MessageSquare, Music, Save, 
   Camera, ChevronRight, Star, ShieldCheck, Mail, Coins, 
-  Lock, MapPin, Cigarette, Dog, Info, Award, Car
+  Lock, MapPin, Cigarette, Dog, Info, Award, Car, Clock
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -16,14 +16,13 @@ export default function ProfilPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  // Données utilisateur dynamiques
   const [user, setUser] = useState<any>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [prefs, setPrefs] = useState({ music: true, chat: true, smoke: false, pets: false });
+  const [verificationStatus, setVerificationStatus] = useState("non_verifie");
   
-  // Statistiques réelles
   const [stats, setStats] = useState({ solde: 0, trajetsCount: 0 });
 
   useEffect(() => {
@@ -32,20 +31,18 @@ export default function ProfilPage() {
       if (!session) { router.push('/connexion'); return; }
       setUser(session.user);
 
-      // 1. Récupérer les infos du profil
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
       if (profile) {
         setFullName(profile.full_name || "");
         setPhone(profile.phone || "");
         setBio(profile.bio || "");
+        setVerificationStatus(profile.verification_status || "non_verifie");
         if (profile.preferences) setPrefs(profile.preferences);
       }
 
-      // 2. Récupérer le solde réel (Somme des gains - Somme des dépenses)
       const { data: paiements } = await supabase.from('paiements').select('montant, type').eq('user_id', session.user.id);
       const totalSolde = paiements?.reduce((acc, curr) => curr.type === 'gain' ? acc + curr.montant : acc - curr.montant, 0) || 0;
 
-      // 3. Récupérer le nombre de trajets publiés
       const { count } = await supabase.from('trajets').select('*', { count: 'exact', head: true }).eq('conducteur_nom', profile?.full_name);
 
       setStats({ solde: totalSolde, trajetsCount: count || 0 });
@@ -102,7 +99,6 @@ export default function ProfilPage() {
               <ChevronRight className="text-gray-300" />
             </div>
 
-            {/* STATISTIQUES RÉELLES CONNECTÉES */}
             <div className="grid grid-cols-2 gap-4">
                <Link href="/paiements" className="bg-gray-50 p-6 rounded-3xl flex flex-col items-center gap-2 hover:bg-gray-100 transition">
                  <Coins className="text-yamo-teal" />
@@ -119,9 +115,23 @@ export default function ProfilPage() {
             <div className="space-y-4">
               <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Vérifications</h3>
               <div className="space-y-4">
-                <Link href="/verif-identite">
-                    <VerificationItem icon={<ShieldCheck size={18}/>} title="Vérifier une pièce d'identité" checked={false} />
-                </Link>
+                
+                {/* NOUVEAU : GESTION INTELLIGENTE DU STATUT DE VÉRIFICATION */}
+                {verificationStatus === 'verifie' ? (
+                   <VerificationItem icon={<ShieldCheck size={18} className="text-green-500"/>} title="Identité vérifiée" checked={true} />
+                ) : verificationStatus === 'en_attente' ? (
+                   <div className="flex items-center justify-between py-2 px-2">
+                     <div className="flex items-center gap-3 text-gray-700 font-medium">
+                       <Clock size={18} className="text-yamo-orange" />
+                       <span className="text-yamo-orange font-bold">Identité en cours d'analyse</span>
+                     </div>
+                   </div>
+                ) : (
+                   <Link href="/verif-identite" className="block">
+                     <VerificationItem icon={<ShieldCheck size={18}/>} title="Vérifier votre pièce d'identité" checked={false} />
+                   </Link>
+                )}
+
                 <VerificationItem icon={<Mail size={18}/>} title="Adresse e-mail vérifiée" checked={!!user?.email_confirmed_at} />
                 <VerificationItem icon={<Phone size={18}/>} title="Numéro de téléphone vérifié" checked={!!phone} />
               </div>

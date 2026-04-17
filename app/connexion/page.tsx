@@ -29,7 +29,6 @@ export default function Connexion() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   
-  // NOUVEAU : État pour gérer le beau pop-up de succès
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -84,9 +83,7 @@ export default function Connexion() {
         setErrorMsg(error.message);
         setLoading(false);
       } else {
-        // NOUVEAU : On affiche le pop-up pro au lieu de "alert()"
         setShowSuccess(true);
-        // On patiente 2.5 secondes pour qu'il lise, puis on redirige
         setTimeout(() => {
           router.push("/verif-identite");
         }, 2500);
@@ -94,7 +91,6 @@ export default function Connexion() {
     }
   };
 
-  // NOUVEAU : Le composant du Pop-up de succès
   if (showSuccess) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
