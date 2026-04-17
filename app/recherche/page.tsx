@@ -33,7 +33,7 @@ function RechercheContent() {
       // 1. ASTUCE INFAILLIBLE : On récupère UNIQUEMENT les trajets (Évite le crash de jointure Supabase)
       const { data, error } = await supabase
         .from('trajets')
-        .select('*') // On a retiré le "profiles (*)" qui bloquait tout !
+        .select('*')
         .gt('places_disponibles', 0);
 
       if (error) {
@@ -59,7 +59,7 @@ function RechercheContent() {
         const matchDep = tDep.includes(searchDep) || searchDep.includes(tDep);
         const matchDest = tDest.includes(searchDest) || searchDest.includes(tDest);
 
-        // Correction de la date (Utilisation de startsWith pour ignorer les heures parasites de Postgres)
+        // Correction de la date
         const matchDate = !dateRecherche || !t.date_depart || t.date_depart.startsWith(dateRecherche);
 
         return matchDep && matchDest && matchDate;
@@ -67,17 +67,14 @@ function RechercheContent() {
 
       // 3. On fusionne les Profils manuellement avec le JavaScript !
       if (resultatsTrouves.length > 0) {
-        // On liste les ID des chauffeurs
         const userIds = [...new Set(resultatsTrouves.map(t => t.user_id).filter(Boolean))];
         
         if (userIds.length > 0) {
-          // On va chercher leurs profils
           const { data: profilesData } = await supabase
             .from('profiles')
             .select('*')
             .in('id', userIds);
           
-          // On les intègre aux trajets
           resultatsTrouves = resultatsTrouves.map(t => ({
             ...t,
             profiles: profilesData?.find(p => p.id === t.user_id) || {}
@@ -326,5 +323,17 @@ function RechercheContent() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function RechercheResultats() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 font-black text-yamo-teal text-xl">
+        Chargement de la recherche...
+      </div>
+    }>
+      <RechercheContent />
+    </Suspense>
   );
 }
