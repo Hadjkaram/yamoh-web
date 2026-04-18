@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Users, Car, CheckCircle, X, ScanLine, Clock, Trash2, Star, CheckCircle2, History, UserMinus, Phone, AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +36,9 @@ export default function DashboardConducteur() {
   const [comment, setComment] = useState("");
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
+  // --- NOUVEAU : SYSTÈME DE TRACKING GPS SILENCIEUX ---
+  const watchIdRef = useRef<number | null>(null);
+
   const fetchDashboardData = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/connexion'); return; }
@@ -56,13 +59,54 @@ export default function DashboardConducteur() {
 
     if (!error && data) {
       setAnnonces(data);
+      
+      // Activer le GPS si le chauffeur a un trajet aujourd'hui
+      const today = new Date().toISOString().split('T')[0];
+      const hasTripToday = data.some(t => t.date_depart === today);
+      if (hasTripToday) {
+        startSilentTracking(data.filter(t => t.date_depart === today).map(t => t.id));
+      }
     }
     setLoading(false);
   };
 
   useEffect(() => {
     fetchDashboardData();
+    
+    // Nettoyer le tracker GPS quand on quitte la page
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
   }, [router]);
+
+  // --- FONCTION DE TRACKING GPS (Arrière-plan) ---
+  const startSilentTracking = (trajetIds: string[]) => {
+    if (!navigator.geolocation) return;
+
+    // On utilise watchPosition pour être alerté à chaque mouvement
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        // On met à jour tous les trajets du jour avec la nouvelle position
+        for (const trajetId of trajetIds) {
+          // Note : Il faut s'assurer d'avoir ajouté les colonnes `lat` et `lng` dans la table trajets sur Supabase
+          await supabase.from('trajets').update({ lat: lat, lng: lng }).eq('id', trajetId);
+        }
+      },
+      (error) => {
+        console.warn("Tracking GPS refusé ou impossible:", error.message);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 5000
+      }
+    );
+  };
 
   // --- SUPPRIMER TOUT LE TRAJET ---
   const supprimerTrajet = (trajetId: string) => {
@@ -239,7 +283,16 @@ export default function DashboardConducteur() {
         </div>
 
         {activeTab === "en_cours" && (
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
+            
+            {/* Petit indicateur visuel (discret) que le GPS tourne */}
+            {watchIdRef.current !== null && (
+              <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-50 px-2 py-1 rounded-full border border-green-100">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></div>
+                <span className="text-[9px] font-black text-green-600 uppercase">GPS</span>
+              </div>
+            )}
+
             <div>
               <h2 className="text-2xl font-black text-gray-900 mb-1">Validation des billets</h2>
               <p className="text-gray-500">Scannez le code des passagers à l'embarquement.</p>

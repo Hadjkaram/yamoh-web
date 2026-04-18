@@ -13,7 +13,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function ERPAdmin() {
   const router = useRouter();
-  const [activeMenu, setActiveMenu] = useState("live"); // On met le Live par défaut pour la sécurité
+  const [activeMenu, setActiveMenu] = useState("live");
   const [globalSearch, setGlobalSearch] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
   
@@ -41,7 +41,6 @@ export default function ERPAdmin() {
   const [pendingRecharges, setPendingRecharges] = useState<any[]>([]);
   const [loadingRecharges, setLoadingRecharges] = useState(true);
 
-  // --- NOUVEAU : SYSTÈME D'ALERTES SOS ---
   const [alertes, setAlertes] = useState<any[]>([]);
 
   useEffect(() => {
@@ -82,10 +81,8 @@ export default function ERPAdmin() {
     }
   }, [activeMenu, isAuthorized]);
 
-  // --- SIMULATION DES ALERTES SOS ---
   const fetchAlertes = async () => {
-    // Pour l'instant on simule une fausse alerte pour voir le design
-    // Plus tard on connectera à Supabase: await supabase.from('alertes').select('*')
+    // Remplacer plus tard par : const { data } = await supabase.from('alertes').select('*').order('created_at', { ascending: false });
     setAlertes([
       { id: 1, type: 'SOS_PASSAGER', message: "Conduite dangereuse !", trajet: "Abidjan -> Yamoussoukro", passager: "Aicha K.", chauffeur: "Ibrahim", date: new Date().toISOString(), lat: 5.3096, lng: -4.0126 }
     ]);
@@ -151,19 +148,15 @@ export default function ERPAdmin() {
   const fetchLiveTrips = async () => {
     setLoadingLive(true);
     const today = new Date().toISOString().split('T')[0];
-    // On sélectionne aussi les coordonnées GPS du chauffeur si on les a rajoutées dans la base
     const { data } = await supabase.from('trajets').select('*, reservations(*)').gte('date_depart', today).order('date_depart', { ascending: true });
     if (data) setLiveTrips(data);
     setLoadingLive(false);
   };
 
-  // --- OUVRIR LE GPS ---
   const openGPS = (lat?: number, lng?: number) => {
-    // Si on a les coordonnées, on ouvre Google Maps
     if (lat && lng) {
       window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
     } else {
-      // Pour l'instant (démo), on ouvre sur Abidjan
       window.open(`https://www.google.com/maps/search/?api=1&query=5.30966,-4.01266`, '_blank');
     }
   };
@@ -307,7 +300,6 @@ export default function ERPAdmin() {
         <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white"><X size={24} /></button>
       </div>
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {/* MISE EN AVANT DE LA SÉCURITÉ */}
         <MenuBtn icon={<Map size={20}/>} label="Tour de Contrôle" active={activeMenu === "live"} onClick={() => {setActiveMenu("live"); setIsMobileMenuOpen(false);}} />
         <MenuBtn icon={<AlertOctagon size={20}/>} label="Urgences SOS" badge={alertes.length > 0 ? alertes.length : undefined} active={activeMenu === "alertes"} onClick={() => {setActiveMenu("alertes"); setIsMobileMenuOpen(false);}} isAlert={true}/>
         
@@ -355,7 +347,6 @@ export default function ERPAdmin() {
 
         <div className="p-4 md:p-8">
           
-          {/* --- TOUR DE CONTRÔLE LIVE --- */}
           {activeMenu === "live" && (
              loadingLive ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
              liveTrips.length === 0 ? (
@@ -372,7 +363,6 @@ export default function ERPAdmin() {
                    
                    return (
                      <div key={trip.id} className="bg-white p-5 md:p-6 rounded-[2rem] shadow-sm border border-gray-200 relative overflow-hidden">
-                       {/* Badge statut tracking */}
                        <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-black px-4 py-1 rounded-bl-xl uppercase tracking-widest flex items-center gap-1 animate-pulse">
                          <div className="w-1.5 h-1.5 bg-white rounded-full"></div> GPS Actif
                        </div>
@@ -406,7 +396,6 @@ export default function ERPAdmin() {
              )
           )}
 
-          {/* --- ALERTES SOS --- */}
           {activeMenu === "alertes" && (
              alertes.length === 0 ? (
                <div className="bg-white p-12 md:p-16 rounded-[2rem] text-center border border-gray-100 shadow-sm mx-4 md:mx-0">
@@ -454,8 +443,63 @@ export default function ERPAdmin() {
             </div>
           )}
 
-          {/* LE RESTE DES MENUS RESTE IDENTIQUE : kyc, recharges, users, compta... */}
-          {/* ... (Je les ai gardés exactement comme avant pour éviter que le code ne soit trop long ici, tu gardes le fonctionnement) ... */}
+          {/* LA PARTIE MANQUANTE : KYC ET USERS */}
+          {activeMenu === "kyc" && (
+             loadingKyc ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
+             pendingUsers.length === 0 ? (
+              <div className="bg-white p-12 md:p-16 rounded-[2rem] text-center border border-gray-100 shadow-sm mx-4 md:mx-0">
+                <ShieldCheck size={64} className="mx-auto text-green-500 mb-4 opacity-50" />
+                <h3 className="text-2xl font-black">Tout est propre !</h3><p className="text-gray-500 mt-2">Aucun profil en attente de vérification.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                {pendingUsers.map(user => (
+                  <div key={user.id} className="bg-white p-5 md:p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-[#E8F4F8] text-yamo-teal font-black text-xl rounded-full flex items-center justify-center flex-shrink-0">{user.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                      <div className="overflow-hidden"><h4 className="font-black text-lg truncate">{user.full_name || 'Utilisateur'}</h4><p className="text-xs font-bold text-gray-400 uppercase truncate">{user.role || 'Passager'}</p></div>
+                    </div>
+                    <div className="bg-orange-50 text-orange-600 px-4 py-3 rounded-xl text-sm font-bold flex justify-between mb-4"><span>Doc : {user.kyc_doc_type?.toUpperCase() || '?'}</span><AlertTriangle size={16} /></div>
+                    <button onClick={() => openUserModal(user)} className="mt-auto w-full bg-gray-900 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-black transition flex justify-center items-center gap-2"><Eye size={18} /> Examiner</button>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+
+          {activeMenu === "users" && (
+             loadingUsers ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
+             <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
+               <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
+                      <th className="p-4 md:p-6">Utilisateur</th><th className="p-4 md:p-6">Rôle</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Statut KYC</th><th className="p-4 md:p-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredUsers.map(u => (
+                      <tr key={u.id} className="hover:bg-gray-50/50 transition">
+                        <td className="p-4 md:p-6 flex items-center gap-3 md:gap-4">
+                          <div className="w-8 h-8 md:w-10 md:h-10 bg-yamo-teal/10 text-yamo-teal font-black rounded-full flex items-center justify-center flex-shrink-0">{u.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                          <div><p className="font-bold text-sm md:text-base truncate max-w-[150px]">{u.full_name || 'Utilisateur'}</p><p className="text-[10px] md:text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString()}</p></div>
+                        </td>
+                        <td className="p-4 md:p-6"><span className={`px-2 py-1 md:px-3 md:py-1 text-[10px] md:text-xs font-black uppercase rounded-lg ${u.role === 'chauffeur' ? 'bg-yamo-orange/10 text-yamo-orange' : 'bg-gray-100 text-gray-600'}`}>{u.role || 'Passager'}</span></td>
+                        <td className="p-4 md:p-6 font-medium text-xs md:text-sm">{u.phone || 'N/A'}</td>
+                        <td className="p-4 md:p-6">
+                          {u.verification_status === 'verifie' ? <span className="text-green-600 font-bold text-xs md:text-sm flex items-center gap-1"><CheckCircle2 size={14}/> <span className="hidden md:inline">Vérifié</span></span> :
+                           u.verification_status === 'en_attente' ? <span className="text-orange-500 font-bold text-xs md:text-sm flex items-center gap-1"><Clock size={14}/> <span className="hidden md:inline">Attente</span></span> :
+                           <span className="text-gray-400 font-bold text-xs md:text-sm flex items-center gap-1"><ShieldCheck size={14}/> <span className="hidden md:inline">Non initié</span></span>}
+                        </td>
+                        <td className="p-4 md:p-6 text-right">
+                          <button onClick={() => handleDeleteUser(u.id, u.full_name)} className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-xl transition inline-flex justify-center" title="Bannir et Supprimer"><Trash2 size={18} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredUsers.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-gray-400 font-bold">Aucun utilisateur trouvé.</td></tr>}
+                  </tbody>
+               </table>
+             </div>
+          )}
 
           {activeMenu === "recharges" && (
              loadingRecharges ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
@@ -496,13 +540,22 @@ export default function ERPAdmin() {
              loadingCompta ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
              <div className="space-y-6 md:space-y-8 animate-in fade-in duration-300">
                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-                 {/* ... Stats Compta ... */}
                  <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100">
                    <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4"><Activity size={24}/></div>
                    <p className="text-gray-500 font-bold uppercase text-[10px] md:text-xs tracking-wider mb-1">Volume global (Brut)</p>
                    <p className="text-2xl md:text-3xl font-black text-gray-900">{statsCompta.volumeGlobal.toLocaleString()} <span className="text-sm md:text-lg">F</span></p>
                  </div>
-                 {/* ... */}
+                 <div className="bg-gray-900 p-6 md:p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden">
+                   <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-bl-full pointer-events-none"></div>
+                   <div className="w-12 h-12 bg-white/10 text-yamo-teal rounded-full flex items-center justify-center mb-4"><TrendingUp size={24}/></div>
+                   <p className="text-gray-400 font-bold uppercase text-[10px] md:text-xs tracking-wider mb-1">Chiffre d'Affaires (10%)</p>
+                   <p className="text-3xl md:text-4xl font-black text-yamo-teal">{statsCompta.commissionYamoh.toLocaleString()} <span className="text-sm md:text-lg text-white">F</span></p>
+                 </div>
+                 <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                   <div className="w-12 h-12 bg-yamo-orange/10 text-yamo-orange rounded-full flex items-center justify-center mb-4"><Wallet size={24}/></div>
+                   <p className="text-gray-500 font-bold uppercase text-[10px] md:text-xs tracking-wider mb-1">Total Soldes Chauffeurs</p>
+                   <p className="text-2xl md:text-3xl font-black text-gray-900">{statsCompta.totalWallets.toLocaleString()} <span className="text-sm md:text-lg">F</span></p>
+                 </div>
                </div>
 
                <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
@@ -536,11 +589,52 @@ export default function ERPAdmin() {
                </div>
              </div>
           )}
-          
-          {/* ... (Menu Users & KYC inchangés) ... */}
 
         </div>
       </main>
+
+      {/* --- MODAL KYC --- */}
+      {selectedUser && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
+            <header className="px-6 py-4 md:px-8 md:py-6 border-b border-gray-100 flex justify-between bg-gray-50 items-start md:items-center">
+              <div>
+                <h3 className="text-xl md:text-2xl font-black text-gray-900 pr-4">Examen : {selectedUser.full_name || 'Utilisateur'}</h3>
+                <p className="text-gray-500 font-medium text-sm md:text-base mt-1">Type de document : {selectedUser.kyc_doc_type?.toUpperCase() || 'INCONNU'}</p>
+              </div>
+              <button onClick={() => setSelectedUser(null)} className="p-2 bg-gray-200 rounded-full hover:bg-gray-300 transition flex-shrink-0"><X size={20}/></button>
+            </header>
+            
+            <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-gray-100">
+              {loadingDocs ? <div className="text-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin mx-auto mb-4" /><p className="font-bold">Extraction sécurisée des fichiers...</p></div> :
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                  <div className="space-y-2">
+                    <h4 className="font-black text-gray-700 uppercase text-xs tracking-widest bg-white inline-block px-3 py-1 rounded-full shadow-sm">Recto / Passeport</h4>
+                    {userDocs?.recto ? <a href={userDocs.recto} target="_blank" rel="noreferrer"><img src={userDocs.recto} className="w-full h-48 md:h-64 object-cover rounded-2xl border-4 border-white shadow-md hover:scale-[1.02] transition cursor-zoom-in" /></a> : <div className="w-full h-48 md:h-64 bg-white/50 border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center font-bold text-gray-400">Document Manquant</div>}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h4 className="font-black text-gray-700 uppercase text-xs tracking-widest bg-white inline-block px-3 py-1 rounded-full shadow-sm">Selfie de vérification</h4>
+                    {userDocs?.selfie ? <a href={userDocs.selfie} target="_blank" rel="noreferrer"><img src={userDocs.selfie} className="w-full h-48 md:h-64 object-cover rounded-2xl border-4 border-white shadow-md hover:scale-[1.02] transition cursor-zoom-in" /></a> : <div className="w-full h-48 md:h-64 bg-white/50 border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center font-bold text-gray-400">Selfie Manquant</div>}
+                  </div>
+                  
+                  {userDocs?.verso && 
+                    <div className="space-y-2 md:col-span-2">
+                      <h4 className="font-black text-gray-700 uppercase text-xs tracking-widest bg-white inline-block px-3 py-1 rounded-full shadow-sm">Verso (Si CNI)</h4>
+                      <a href={userDocs.verso} target="_blank" rel="noreferrer"><img src={userDocs.verso} className="w-full h-48 md:h-64 object-cover rounded-2xl border-4 border-white shadow-md md:w-1/2 hover:scale-[1.02] transition cursor-zoom-in" /></a>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+            
+            <footer className="p-4 md:p-6 bg-white border-t border-gray-100 flex flex-col md:flex-row gap-3 md:gap-4 justify-end">
+              <button onClick={() => handleActionKYC(selectedUser.id, 'rejete')} className="w-full md:w-auto px-6 py-4 md:py-3 bg-red-50 text-red-600 font-black rounded-xl hover:bg-red-100 flex items-center justify-center gap-2 transition"><XCircle size={20} /> Rejeter le dossier</button>
+              <button onClick={() => handleActionKYC(selectedUser.id, 'verifie')} className="w-full md:w-auto px-8 py-4 md:py-3 bg-green-500 text-white font-black rounded-xl hover:bg-green-600 shadow-lg shadow-green-500/20 flex items-center justify-center gap-2 transition"><CheckCircle size={20} /> Approuver le compte</button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

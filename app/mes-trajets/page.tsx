@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, QrCode, X, CheckCircle2, Download, Star, Ticket, History, CalendarDays, PauseCircle } from "lucide-react";
+import { ArrowLeft, QrCode, X, CheckCircle2, Download, Star, Ticket, History, CalendarDays, PauseCircle, AlertTriangle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import QRCode from "react-qr-code"; 
 
 const TAGS_CHAUFFEUR = ["Conduite prudente", "Véhicule propre", "Bonne musique", "Ponctuel", "Climatisé", "Agréable"];
+const MOTIFS_SOS = ["Conduite dangereuse", "Harcèlement / Agressivité", "Panne / Accident", "Le chauffeur ne correspond pas", "Autre urgence"];
 
 export default function MesTrajets() {
   const router = useRouter();
@@ -21,14 +22,18 @@ export default function MesTrajets() {
   // MODALS
   const [selectedResa, setSelectedResa] = useState<any>(null); 
   const [ratingModal, setRatingModal] = useState<any>(null); 
+  const [sosModal, setSosModal] = useState<any>(null); // NOUVEAU : Modal SOS
 
-  // ÉTATS DE NOTATION
+  // ÉTATS DE NOTATION & SOS
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [comment, setComment] = useState("");
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [avisSoumis, setAvisSoumis] = useState<string[]>([]); 
+  
+  const [sosType, setSosType] = useState("");
+  const [isSubmittingSos, setIsSubmittingSos] = useState(false);
 
   useEffect(() => {
     async function fetchMesReservations() {
@@ -83,12 +88,10 @@ export default function MesTrajets() {
     }
   };
 
-  // NOUVEAU : Signaler une absence pour geler le ticket un jour
   const handleSignalerAbsence = async (resa: any) => {
     const confirm = window.confirm("Prévenir le conducteur que vous ne voyagez pas demain ? Votre place sera libérée pour ce jour-là, et votre jour d'abonnement sera conservé.");
     if (!confirm) return;
 
-    // On envoie la notification au chauffeur
     await supabase.from('notifications').insert([{
       user_id: resa.trajets.user_id,
       titre: "Imprévu Passager ⚠️",
@@ -97,6 +100,53 @@ export default function MesTrajets() {
     }]);
 
     alert("Le conducteur a été prévenu. Votre jour est conservé !");
+  };
+
+  // --- NOUVEAU : GESTION DE L'ALERTE SOS ---
+  const handleSOS = async () => {
+    if (!sosType) {
+      alert("Veuillez sélectionner un motif d'urgence.");
+      return;
+    }
+    
+    setIsSubmittingSos(true);
+    let lat = null;
+    let lng = null;
+
+    // Tentative de récupération GPS en urgence
+    if (navigator.geolocation) {
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, enableHighAccuracy: true });
+        });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch (err) {
+        console.warn("Position introuvable pour le SOS");
+      }
+    }
+
+    const trajetInfo = `${sosModal.trajets.depart.split(',')[0]} → ${sosModal.trajets.destination.split(',')[0]}`;
+    
+    const { error } = await supabase.from('alertes').insert([{
+      type: 'SOS_PASSAGER',
+      message: sosType,
+      trajet: trajetInfo,
+      passager: user?.user_metadata?.full_name || user?.email,
+      chauffeur: sosModal.trajets.conducteur_nom,
+      lat: lat,
+      lng: lng
+    }]);
+
+    setIsSubmittingSos(false);
+
+    if (error) {
+      alert("Erreur réseau : " + error.message);
+    } else {
+      alert("🚨 ALERTE ENVOYÉE ! L'administrateur Yamoh a reçu votre position et va vous contacter immédiatement.");
+      setSosModal(null);
+      setSosType("");
+    }
   };
 
   // FILTRAGE INTELLIGENT DES BILLETS
@@ -119,18 +169,11 @@ export default function MesTrajets() {
 
       <div className="p-4 md:p-8 max-w-2xl mx-auto w-full print:p-0">
         
-        {/* NOUVEAU : SYSTÈME D'ONGLETS */}
         <div className="flex bg-white p-1 rounded-2xl mb-8 shadow-sm border border-gray-100 print:hidden">
-          <button 
-            onClick={() => setActiveTab("en_cours")} 
-            className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "en_cours" ? 'bg-yamo-teal text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-          >
+          <button onClick={() => setActiveTab("en_cours")} className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "en_cours" ? 'bg-yamo-teal text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
             <Ticket size={18}/> En cours ({billetsEnCours.length})
           </button>
-          <button 
-            onClick={() => setActiveTab("historique")} 
-            className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "historique" ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-          >
+          <button onClick={() => setActiveTab("historique")} className={`flex-1 py-3 text-sm font-black rounded-xl transition flex items-center justify-center gap-2 ${activeTab === "historique" ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
             <History size={18}/> Historique
           </button>
         </div>
@@ -196,27 +239,33 @@ export default function MesTrajets() {
                         </div>
                       </div>
                       
-                      {/* BOUTONS D'ACTION SELON LE STATUT ET LE TYPE */}
+                      {/* BOUTONS D'ACTION */}
                       {!isUsed ? (
-                        <div className="flex flex-col gap-2 print:hidden">
+                        <div className="flex flex-col gap-2 print:hidden mt-2">
                           <button onClick={() => setSelectedResa(resa)} className="w-full bg-white text-yamo-teal font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition shadow-sm">
                             <QrCode size={20} /> Afficher le QR Code
                           </button>
                           
-                          {/* LE FAMEUX BOUTON ABSENCE POUR LES ABONNEMENTS */}
-                          {isAbonnement && (
-                            <button onClick={() => handleSignalerAbsence(resa)} className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-white/30 transition text-sm">
-                              <PauseCircle size={18} /> Je ne voyage pas au prochain trajet
+                          <div className="grid grid-cols-2 gap-2 mt-1">
+                            {isAbonnement && (
+                              <button onClick={() => handleSignalerAbsence(resa)} className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-white/30 transition text-[10px] md:text-xs">
+                                <PauseCircle size={16} /> Je passe mon tour
+                              </button>
+                            )}
+                            
+                            {/* BOUTON SOS URGENCE */}
+                            <button onClick={() => setSosModal(resa)} className={`w-full bg-red-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-red-600 transition text-[10px] md:text-xs shadow-lg shadow-red-500/20 ${!isAbonnement ? 'col-span-2' : ''}`}>
+                              <AlertTriangle size={16} /> Signaler un problème
                             </button>
-                          )}
+                          </div>
                         </div>
                       ) : (
                         !isRated ? (
-                           <button onClick={() => setRatingModal(resa)} className="w-full bg-gray-900 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition shadow-lg print:hidden">
+                           <button onClick={() => setRatingModal(resa)} className="w-full bg-gray-900 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition shadow-lg print:hidden mt-2">
                              <Star size={20} className="fill-current text-yamo-orange" /> Noter le conducteur
                            </button>
                         ) : (
-                           <div className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 print:text-gray-800 print:bg-transparent">
+                           <div className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 print:text-gray-800 print:bg-transparent mt-2">
                              <CheckCircle2 size={20} /> Merci pour votre avis !
                            </div>
                         )
@@ -230,7 +279,7 @@ export default function MesTrajets() {
         )}
       </div>
 
-      {/* --- LE MODAL DU QR CODE (Inchangé) --- */}
+      {/* --- MODAL QR CODE --- */}
       {selectedResa && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6 backdrop-blur-sm transition-opacity print:bg-white print:items-start print:pt-10" onClick={() => setSelectedResa(null)}>
           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm flex flex-col items-center relative shadow-2xl print:shadow-none print:w-full print:max-w-none" onClick={(e) => e.stopPropagation()}>
@@ -245,7 +294,47 @@ export default function MesTrajets() {
         </div>
       )}
 
-      {/* --- LE MODAL DE NOTATION (Inchangé) --- */}
+      {/* --- NOUVEAU MODAL : ALERTE SOS --- */}
+      {sosModal && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-md relative animate-in zoom-in duration-300">
+            <button onClick={() => {setSosModal(null); setSosType("");}} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition">
+              <X size={20} />
+            </button>
+            
+            <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4 shadow-inner animate-pulse">
+              <AlertTriangle size={40} />
+            </div>
+            
+            <h2 className="text-2xl font-black text-red-600 text-center mb-2">Signaler une urgence</h2>
+            <p className="text-gray-500 text-sm mb-6 text-center">
+              Si vous vous sentez en danger, prévenez immédiatement l'administration Yamoh. Votre GPS sera partagé.
+            </p>
+            
+            <div className="w-full space-y-3 mb-6">
+              {MOTIFS_SOS.map((motif) => (
+                <button
+                  key={motif}
+                  onClick={() => setSosType(motif)}
+                  className={`w-full p-4 rounded-xl font-bold border-2 transition text-left ${sosType === motif ? 'border-red-500 bg-red-50 text-red-600 shadow-sm' : 'border-gray-100 bg-gray-50 text-gray-600 hover:bg-red-50/50'}`}
+                >
+                  {motif}
+                </button>
+              ))}
+            </div>
+
+            <button 
+              onClick={handleSOS} 
+              disabled={isSubmittingSos || !sosType}
+              className={`w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 ${!sosType ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-600/30'}`}
+            >
+              {isSubmittingSos ? <><Loader2 className="animate-spin" size={20} /> Localisation en cours...</> : "Déclencher l'alerte SOS"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL DE NOTATION (Inchangé) --- */}
       {ratingModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-md relative animate-in zoom-in duration-300">
