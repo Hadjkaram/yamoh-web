@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-// --- COMPOSANT D'AUTO-COMPLÉTION ---
+// --- COMPOSANT D'AUTO-COMPLÉTION (INCHANGÉ) ---
 function FormLocationAutocomplete({ placeholder, value, onChange, dotColor, focusColor }: any) {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [history, setHistory] = useState<string[]>([]);
@@ -99,6 +99,7 @@ const JOURS_SEMAINE = [
 export default function PublierTrajet() {
   const router = useRouter();
   
+  // ÉTATS GLOBAUX
   const [typeTrajet, setTypeTrajet] = useState<"quotidien" | "evenement">("quotidien");
   const [isRecurring, setIsRecurring] = useState(false);
   const [joursReguliers, setJoursReguliers] = useState<string[]>([]);
@@ -125,7 +126,7 @@ export default function PublierTrajet() {
   const [success, setSuccess] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
 
-  // Fonction initiale pour charger la donnée
+  // LA CORRECTION EST ICI : 
   const fetchUserData = async () => {
     setSoldeLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -137,15 +138,23 @@ export default function PublierTrajet() {
     
     setUser(session.user);
     
-    const { data: profileData } = await supabase
+    // 1. On récupère UNIQUEMENT le solde_wallet pour éviter que la requête plante
+    const { data: profileData, error } = await supabase
       .from('profiles')
-      .select('vehicule_marque, vehicule_couleur, solde_wallet')
+      .select('solde_wallet')
       .eq('id', session.user.id)
       .single();
       
     if (profileData) {
       setSolde(Number(profileData.solde_wallet) || 0);
-      const infosVehicule = [profileData.vehicule_marque, profileData.vehicule_couleur].filter(Boolean).join(" - ");
+    } else {
+      console.error("Erreur de récupération profil:", error);
+    }
+    
+    // 2. On récupère les infos du véhicule directement depuis la session (metadata)
+    const metadata = session.user.user_metadata;
+    if (metadata) {
+      const infosVehicule = [metadata.vehicule_marque, metadata.vehicule_couleur].filter(Boolean).join(" - ");
       if (infosVehicule) setVehicule(infosVehicule);
     }
     
@@ -228,13 +237,12 @@ export default function PublierTrajet() {
               <div className="bg-red-500 text-white p-2 rounded-full flex-shrink-0"><AlertCircle size={24}/></div>
               <div className="flex-1">
                 <h3 className="font-black text-red-900 text-lg">Votre portefeuille est vide !</h3>
-                <p className="text-red-700 font-medium text-sm mt-1">Vous devez recharger au moins 100 FCFA sur votre compte Yamoh pour publier des annonces et débloquer ce formulaire.</p>
+                <p className="text-red-700 font-medium text-sm mt-1">Vous devez recharger au moins 100 FCFA sur votre compte Yamoh pour publier des annonces et débloquer ce formulaire. (Solde actuel : {solde} F)</p>
                 
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Link href="/recharge" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-red-600 transition shadow-lg shadow-red-500/20">
                     <Wallet size={16}/> Recharger
                   </Link>
-                  {/* CORRECTION : Le bouton force le rechargement dur de la page pour briser le cache */}
                   <button type="button" onClick={() => window.location.reload()} className="inline-flex items-center gap-2 bg-white text-red-600 px-5 py-3 rounded-xl font-black text-sm border-2 border-red-100 hover:bg-red-50 transition">
                     <RefreshCw size={16} />
                     Actualiser mon solde
