@@ -89,7 +89,8 @@ export default function ProfilPage() {
         </button>
         
         <div className="w-10 h-10 relative">
-           <Image src="/logo.svg" alt="Yamoh" fill className="object-contain" />
+           {/* LOGO YAMOH ICI */}
+           <Image src="/Yamo_Logo.png" alt="Yamoh" fill className="object-contain" />
         </div>
         
         <div className="w-10"></div>
