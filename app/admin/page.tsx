@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image"; // <-- AJOUT DE L'IMPORT IMAGE ICI
 import { 
   LayoutDashboard, ShieldCheck, Users, Map, Wallet, Search, 
   CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
@@ -105,7 +106,6 @@ export default function ERPAdmin() {
         if (file.name.includes('recto')) docs.recto = urlData.publicUrl;
         if (file.name.includes('verso')) docs.verso = urlData.publicUrl;
         if (file.name.includes('selfie')) docs.selfie = urlData.publicUrl;
-        // CORRECTION : On récupère aussi permis et carte grise
         if (file.name.includes('permis')) docs.permis = urlData.publicUrl;
         if (file.name.includes('cartegrise')) docs.cartegrise = urlData.publicUrl;
       });
@@ -299,7 +299,10 @@ export default function ERPAdmin() {
   const SidebarContent = () => (
     <>
       <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-        <h1 className="text-2xl font-black text-yamo-teal tracking-wider">YAMOH<span className="text-white text-sm ml-2 font-medium">ERP</span></h1>
+        {/* LE LOGO AGRANDI EST LÀ */}
+        <div className="w-32 h-10 relative">
+           <Image src="/Yamo_Logo.png" alt="Yamoh ERP" fill className="object-contain" />
+        </div>
         <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white"><X size={24} /></button>
       </div>
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -565,7 +568,7 @@ export default function ERPAdmin() {
                     <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><AlertTriangle size={24}/></div>
                     <div>
                       <h3 className="text-lg md:text-xl font-black text-gray-900">Recharge d'urgence / Espèces</h3>
-                      <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur (Paiement physique ou bug API).</p>
+                      <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur.</p>
                     </div>
                   </div>
                   <table className="w-full text-left border-collapse min-w-[500px]">
@@ -595,7 +598,7 @@ export default function ERPAdmin() {
         </div>
       </main>
 
-      {/* --- MODAL KYC : CORRIGÉ POUR AFFICHER PERMIS ET CARTE GRISE --- */}
+      {/* --- MODAL KYC : AFFICHE MAINTENANT PERMIS ET CARTE GRISE --- */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
@@ -628,7 +631,7 @@ export default function ERPAdmin() {
                     </div>
                   }
 
-                  {/* CORRECTION : Affichage Permis & Carte Grise si c'est un chauffeur */}
+                  {/* Documents spécifiques pour le Chauffeur */}
                   {selectedUser.role === 'chauffeur' && (
                     <>
                       <div className="col-span-1 md:col-span-2 border-t-2 border-dashed border-gray-300 my-4"></div>

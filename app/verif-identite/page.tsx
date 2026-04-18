@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ShieldCheck, CheckCircle, Camera, Loader2, CreditCard, Book, FileText, ScanFace, CheckCircle2, Car } from "lucide-react";
+import { ArrowLeft, ShieldCheck, CheckCircle, Camera, Loader2, CreditCard, Book, FileText, ScanFace, CheckCircle2, Car, AlertCircle } from "lucide-react"; // <-- L'icône AlertCircle est bien ajoutée ici !
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -271,7 +271,7 @@ export default function VerifIdentite() {
           </div>
         )}
 
-        {/* NOUVEAU: ÉTAPE 5.1 : PERMIS (CHAUFFEUR SEULEMENT) */}
+        {/* ÉTAPE 5.1 : PERMIS (CHAUFFEUR SEULEMENT) */}
         {step === 5.1 && (
           <div className="animate-in slide-in-from-right-8 duration-300">
             <div className="bg-orange-50 text-yamo-orange inline-flex px-4 py-1.5 rounded-full font-black text-xs uppercase tracking-widest mb-4">Étape Chauffeur 1/2</div>
@@ -294,7 +294,7 @@ export default function VerifIdentite() {
           </div>
         )}
 
-        {/* NOUVEAU: ÉTAPE 5.2 : CARTE GRISE (CHAUFFEUR SEULEMENT) */}
+        {/* ÉTAPE 5.2 : CARTE GRISE (CHAUFFEUR SEULEMENT) */}
         {step === 5.2 && (
           <div className="animate-in slide-in-from-right-8 duration-300">
             <div className="bg-orange-50 text-yamo-orange inline-flex px-4 py-1.5 rounded-full font-black text-xs uppercase tracking-widest mb-4">Étape Chauffeur 2/2</div>
