@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, CheckCircle2, Car, User, Coins, MapPin, History, 
   Calendar, Clock, PartyPopper, CalendarDays, Repeat, Snowflake, 
-  Briefcase, AlertCircle, Wallet 
+  Briefcase, AlertCircle, Wallet, RefreshCw 
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -119,7 +119,6 @@ export default function PublierTrajet() {
   
   const [user, setUser] = useState<any>(null);
   
-  // CORRECTION: On initialise soldeLoading à true pour bloquer le formulaire pendant la vérification
   const [solde, setSolde] = useState<number>(0); 
   const [soldeLoading, setSoldeLoading] = useState(true);
   
@@ -127,29 +126,37 @@ export default function PublierTrajet() {
   const [success, setSuccess] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
 
+  // --- FONCTION DE RÉCUPÉRATION ISOLÉE POUR FORCER L'ACTUALISATION ---
+  const fetchUserData = async () => {
+    setSoldeLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      router.push('/connexion'); 
+      return;
+    } 
+    
+    setUser(session.user);
+    
+    // On force la lecture directe dans Supabase (bypass cache)
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('vehicule_marque, vehicule_couleur, solde_wallet')
+      .eq('id', session.user.id)
+      .single();
+      
+    if (profileData) {
+      setSolde(Number(profileData.solde_wallet) || 0);
+      const infosVehicule = [profileData.vehicule_marque, profileData.vehicule_couleur].filter(Boolean).join(" - ");
+      if (infosVehicule) setVehicule(infosVehicule);
+    }
+    
+    setAuthChecking(false);
+    setSoldeLoading(false);
+  };
+
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        router.push('/connexion'); 
-      } else {
-        setUser(session.user);
-        
-        // On récupère les infos du véhicule ET le solde du wallet
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('vehicule_marque, vehicule_couleur, solde_wallet')
-          .eq('id', session.user.id)
-          .single();
-          
-        if (profileData) {
-          setSolde(Number(profileData.solde_wallet) || 0); // Sécurisation du type Number
-          const infosVehicule = [profileData.vehicule_marque, profileData.vehicule_couleur].filter(Boolean).join(" - ");
-          if (infosVehicule) setVehicule(infosVehicule);
-        }
-      }
-      setAuthChecking(false);
-      setSoldeLoading(false); // Le solde est chargé, on arrête le chargement
-    });
+    fetchUserData();
   }, [router]);
 
   const toggleJour = (jourId: string) => {
@@ -159,7 +166,6 @@ export default function PublierTrajet() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // DOUBLE SÉCURITÉ : Au clic
     if (solde < 100) {
         alert("Action impossible : Votre portefeuille Yamoh est insuffisant. Vous devez le recharger pour publier un trajet.");
         return;
@@ -204,7 +210,6 @@ export default function PublierTrajet() {
     );
   }
 
-  // SÉCURITÉ VISUELLE : Cette fois, c'est robuste.
   const isSoldeInsuffisant = solde < 100;
 
   return (
@@ -222,20 +227,27 @@ export default function PublierTrajet() {
         {isSoldeInsuffisant && (
           <div className="bg-red-50 border-2 border-red-100 p-6 rounded-[2rem] mb-8 animate-in slide-in-from-top-4">
             <div className="flex items-start gap-4">
-              <div className="bg-red-500 text-white p-2 rounded-full"><AlertCircle size={24}/></div>
+              <div className="bg-red-500 text-white p-2 rounded-full flex-shrink-0"><AlertCircle size={24}/></div>
               <div className="flex-1">
                 <h3 className="font-black text-red-900 text-lg">Votre portefeuille est vide !</h3>
                 <p className="text-red-700 font-medium text-sm mt-1">Vous devez recharger au moins 100 FCFA sur votre compte Yamoh pour publier des annonces et débloquer ce formulaire.</p>
-                {/* 🎯 CORRECTION ICI : Redirection vers /recharge au lieu de /paiements */}
-                <Link href="/recharge" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm mt-4 hover:bg-red-600 transition shadow-lg shadow-red-500/20">
-                  <Wallet size={16}/> Recharger maintenant
-                </Link>
+                
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <Link href="/recharge" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-red-600 transition shadow-lg shadow-red-500/20">
+                    <Wallet size={16}/> Recharger
+                  </Link>
+                  {/* LE NOUVEAU BOUTON D'ACTUALISATION FORCÉE */}
+                  <button onClick={fetchUserData} className="inline-flex items-center gap-2 bg-white text-red-600 px-5 py-3 rounded-xl font-black text-sm border-2 border-red-100 hover:bg-red-50 transition">
+                    <RefreshCw size={16} className={soldeLoading ? "animate-spin" : ""} />
+                    {soldeLoading ? "Vérification..." : "J'ai rechargé"}
+                  </button>
+                </div>
+                
               </div>
             </div>
           </div>
         )}
         
-        {/* SÉLECTEUR DU TYPE DE TRAJET */}
         <div className="flex gap-4 mb-6">
           <button 
             type="button"
@@ -255,7 +267,6 @@ export default function PublierTrajet() {
 
         <form onSubmit={handleSubmit} className={`bg-white p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-8 ${isSoldeInsuffisant ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
           
-          {/* SECTION SPÉCIFIQUE ÉVÉNEMENT */}
           {typeTrajet === "evenement" && (
             <div className="bg-purple-50 border border-purple-100 p-6 rounded-[2rem] animate-in fade-in slide-in-from-top-4">
               <h3 className="font-black text-purple-900 mb-2 flex items-center gap-2"><PartyPopper size={20}/> Détails de l'événement</h3>
@@ -264,7 +275,6 @@ export default function PublierTrajet() {
             </div>
           )}
 
-          {/* SECTION 1 : ITINÉRAIRE */}
           <div>
             <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2"><MapPin size={20} className="text-yamo-teal"/> Itinéraire</h3>
             <div className="flex flex-col gap-4 relative">
@@ -280,7 +290,6 @@ export default function PublierTrajet() {
 
           <hr className="border-gray-100" />
 
-          {/* SECTION 2 : PROGRAMMATION */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-black text-gray-900 flex items-center gap-2"><Calendar size={20} className="text-yamo-teal"/> Programmation</h3>
@@ -326,7 +335,6 @@ export default function PublierTrajet() {
 
           <hr className="border-gray-100" />
 
-          {/* SECTION 3 : VÉHICULE & OPTIONS */}
           <div>
             <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2"><Car size={20} className="text-yamo-teal"/> Détails & Confort</h3>
             
@@ -362,7 +370,6 @@ export default function PublierTrajet() {
           </button>
         </form>
         
-        {/* MESSAGE SI BLOQUÉ */}
         {isSoldeInsuffisant && (
             <p className="text-center text-gray-400 font-bold mt-6 italic">Rechargez votre portefeuille pour débloquer ce formulaire.</p>
         )}
