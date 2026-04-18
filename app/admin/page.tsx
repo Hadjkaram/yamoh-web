@@ -7,7 +7,7 @@ import {
   CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
   Clock, CheckCircle2, Ban, MoreVertical, Lock, User as UserIcon,
   Activity, TrendingUp, DollarSign, MapPin, Navigation, Car, PlusCircle, Trash2,
-  Menu, X, Receipt
+  Menu, X, Receipt, Phone // <-- LA CORRECTION EST LÀ : Ajout de Phone
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -15,7 +15,7 @@ export default function ERPAdmin() {
   const router = useRouter();
   const [activeMenu, setActiveMenu] = useState("kyc");
   const [globalSearch, setGlobalSearch] = useState("");
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Responsive Menu
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
   
   // --- ÉTATS D'AUTHENTIFICATION ADMIN ---
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
@@ -40,7 +40,6 @@ export default function ERPAdmin() {
   const [chauffeurs, setChauffeurs] = useState<any[]>([]);
   const [loadingCompta, setLoadingCompta] = useState(true);
 
-  // NOUVEAU: Demandes de Rechargement
   const [pendingRecharges, setPendingRecharges] = useState<any[]>([]);
   const [loadingRecharges, setLoadingRecharges] = useState(true);
 
@@ -184,10 +183,8 @@ export default function ERPAdmin() {
     }
   };
 
-  // --- NOUVEAU: GESTION DES RECHARGES EN ATTENTE ---
   const fetchPendingRecharges = async () => {
     setLoadingRecharges(true);
-    // On suppose qu'on a une table "paiements" avec un statut "en_attente" pour les recharges
     const { data } = await supabase
       .from('paiements')
       .select('*, profiles(full_name, phone, solde_wallet)')
@@ -202,14 +199,11 @@ export default function ERPAdmin() {
     const confirm = window.confirm(`Voulez-vous valider cette recharge de ${recharge.montant} FCFA pour ${recharge.profiles?.full_name} ? Avez-vous bien reçu l'argent sur ${recharge.methode} ?`);
     if (!confirm) return;
 
-    // 1. Mettre à jour le statut du paiement
     await supabase.from('paiements').update({ type: 'gain' }).eq('id', recharge.id);
     
-    // 2. Mettre à jour le solde du chauffeur
     const nouveauSolde = (recharge.profiles?.solde_wallet || 0) + recharge.montant;
     await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('user_id', recharge.user_id);
     
-    // 3. Notifier le chauffeur
     await supabase.from('notifications').insert([{
       user_id: recharge.user_id, 
       titre: "Recharge validée ! 💰", 
@@ -291,7 +285,6 @@ export default function ERPAdmin() {
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         <MenuBtn icon={<LayoutDashboard size={20}/>} label="Vue d'ensemble" active={activeMenu === "dashboard"} onClick={() => {setActiveMenu("dashboard"); setIsMobileMenuOpen(false);}} />
         <MenuBtn icon={<ShieldCheck size={20}/>} label="Vérifications (KYC)" badge={pendingUsers.length > 0 ? pendingUsers.length : undefined} active={activeMenu === "kyc"} onClick={() => {setActiveMenu("kyc"); setIsMobileMenuOpen(false);}} />
-        {/* NOUVEAU MENU : RECHARGES */}
         <MenuBtn icon={<Receipt size={20}/>} label="Recharges" badge={pendingRecharges.length > 0 ? pendingRecharges.length : undefined} active={activeMenu === "recharges"} onClick={() => {setActiveMenu("recharges"); setIsMobileMenuOpen(false);}} />
         <MenuBtn icon={<Map size={20}/>} label="Trajets en direct" active={activeMenu === "live"} onClick={() => {setActiveMenu("live"); setIsMobileMenuOpen(false);}} />
         <MenuBtn icon={<Users size={20}/>} label="Utilisateurs" active={activeMenu === "users"} onClick={() => {setActiveMenu("users"); setIsMobileMenuOpen(false);}} />
@@ -308,12 +301,10 @@ export default function ERPAdmin() {
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans relative">
       
-      {/* OVERLAY MOBILE */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* SIDEBAR RESPONSIVE */}
       <aside className={`fixed inset-y-0 left-0 w-72 bg-gray-900 text-white flex flex-col z-50 transform transition-transform duration-300 md:translate-x-0 md:relative md:w-64 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <SidebarContent />
       </aside>
@@ -374,7 +365,6 @@ export default function ERPAdmin() {
             )
           )}
 
-          {/* --- NOUVEAU MENU RECHARGES --- */}
           {activeMenu === "recharges" && (
              loadingRecharges ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
              pendingRecharges.length === 0 ? (
