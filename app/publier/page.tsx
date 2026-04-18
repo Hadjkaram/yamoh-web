@@ -199,7 +199,7 @@ export default function PublierTrajet() {
     );
   }
 
-  // SÉCURITÉ VISUELLE : Le solde est-il suffisant ?
+  // SÉCURITÉ VISUELLE : Le solde est-il suffisant ? (Si moins de 100 FCFA, c'est insuffisant)
   const isSoldeInsuffisant = solde !== null && solde < 100;
 
   return (
