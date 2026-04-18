@@ -118,7 +118,11 @@ export default function PublierTrajet() {
   const [lieuRdv, setLieuRdv] = useState("");
   
   const [user, setUser] = useState<any>(null);
-  const [solde, setSolde] = useState<number | null>(null); // NOUVEAU : Suivi du solde
+  
+  // CORRECTION: On initialise soldeLoading à true pour bloquer le formulaire pendant la vérification
+  const [solde, setSolde] = useState<number>(0); 
+  const [soldeLoading, setSoldeLoading] = useState(true);
+  
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
@@ -130,7 +134,7 @@ export default function PublierTrajet() {
       } else {
         setUser(session.user);
         
-        // NOUVEAU : On récupère les infos du véhicule ET le solde du wallet
+        // On récupère les infos du véhicule ET le solde du wallet
         const { data: profileData } = await supabase
           .from('profiles')
           .select('vehicule_marque, vehicule_couleur, solde_wallet')
@@ -144,6 +148,7 @@ export default function PublierTrajet() {
         }
       }
       setAuthChecking(false);
+      setSoldeLoading(false); // Le solde est chargé, on arrête le chargement
     });
   }, [router]);
 
@@ -154,9 +159,9 @@ export default function PublierTrajet() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // SÉCURITÉ WALLET : On bloque si le solde est trop bas
-    if (solde !== null && solde < 100) {
-        alert("Action impossible : Votre solde Yamoh est insuffisant pour publier un trajet.");
+    // DOUBLE SÉCURITÉ : Au clic
+    if (solde < 100) {
+        alert("Action impossible : Votre portefeuille Yamoh est insuffisant. Vous devez le recharger pour publier un trajet.");
         return;
     }
 
@@ -187,7 +192,7 @@ export default function PublierTrajet() {
     }
   };
 
-  if (authChecking) return <div className="min-h-screen flex items-center justify-center font-bold text-yamo-teal">Vérification...</div>;
+  if (authChecking || soldeLoading) return <div className="min-h-screen flex items-center justify-center font-bold text-yamo-teal">Vérification de votre compte...</div>;
 
   if (success) {
     return (
@@ -199,8 +204,8 @@ export default function PublierTrajet() {
     );
   }
 
-  // SÉCURITÉ VISUELLE : Le solde est-il suffisant ? (Si moins de 100 FCFA, c'est insuffisant)
-  const isSoldeInsuffisant = solde !== null && solde < 100;
+  // SÉCURITÉ VISUELLE : Cette fois, c'est robuste.
+  const isSoldeInsuffisant = solde < 100;
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col font-sans pb-12">
@@ -219,8 +224,8 @@ export default function PublierTrajet() {
             <div className="flex items-start gap-4">
               <div className="bg-red-500 text-white p-2 rounded-full"><AlertCircle size={24}/></div>
               <div className="flex-1">
-                <h3 className="font-black text-red-900 text-lg">Votre solde est vide !</h3>
-                <p className="text-red-700 font-medium text-sm mt-1">Vous devez recharger votre compte Yamoh pour pouvoir publier des annonces et recevoir des passagers.</p>
+                <h3 className="font-black text-red-900 text-lg">Votre portefeuille est vide !</h3>
+                <p className="text-red-700 font-medium text-sm mt-1">Vous devez recharger au moins 100 FCFA sur votre compte Yamoh pour publier des annonces et débloquer ce formulaire.</p>
                 <Link href="/paiements" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm mt-4 hover:bg-red-600 transition shadow-lg shadow-red-500/20">
                   <Wallet size={16}/> Recharger maintenant
                 </Link>
@@ -247,7 +252,7 @@ export default function PublierTrajet() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className={`bg-white p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-8 ${isSoldeInsuffisant ? 'opacity-50 pointer-events-none' : ''}`}>
+        <form onSubmit={handleSubmit} className={`bg-white p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col gap-8 ${isSoldeInsuffisant ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
           
           {/* SECTION SPÉCIFIQUE ÉVÉNEMENT */}
           {typeTrajet === "evenement" && (
@@ -351,8 +356,8 @@ export default function PublierTrajet() {
             </div>
           </div>
 
-          <button type="submit" disabled={loading || isSoldeInsuffisant} className={`w-full text-white font-black text-xl py-5 rounded-[1.5rem] shadow-xl transition duration-300 mt-2 ${loading ? 'bg-gray-300' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
-            {loading ? "Chargement..." : "Publier mon annonce"}
+          <button type="submit" disabled={loading || isSoldeInsuffisant} className={`w-full text-white font-black text-xl py-5 rounded-[1.5rem] shadow-xl transition duration-300 mt-2 ${isSoldeInsuffisant ? 'bg-gray-400 cursor-not-allowed' : loading ? 'bg-gray-300' : 'bg-yamo-teal hover:bg-[#115566] shadow-yamo-teal/20'}`}>
+            {loading ? "Chargement..." : isSoldeInsuffisant ? "Rechargez pour publier" : "Publier mon annonce"}
           </button>
         </form>
         
