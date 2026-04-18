@@ -47,10 +47,10 @@ export default function ProfilPage() {
         if (profile.preferences) setPrefs(profile.preferences);
       }
 
-      // Solde Wallet (Nouvelle méthode de calcul basée sur le vrai solde)
+      // Solde Wallet
       setStats({ 
         solde: profile?.solde_wallet || 0, 
-        trajetsCount: 0 // On simplifie pour l'instant
+        trajetsCount: 0
       });
       setLoading(false);
     }
@@ -72,8 +72,6 @@ export default function ProfilPage() {
   };
 
   const handleDeleteAccount = async () => {
-    // Cette action nécessitera une logique plus poussée côté Supabase Edge Function plus tard
-    // Pour l'instant, on déconnecte juste l'utilisateur après confirmation.
     alert("Votre demande de suppression a été envoyée à l'administrateur Yamoh.");
     await supabase.auth.signOut();
     router.push('/');
@@ -84,18 +82,17 @@ export default function ProfilPage() {
   return (
     <main className="min-h-screen bg-white font-sans pb-20">
       
-      {/* HEADER AMÉLIORÉ */}
+      {/* HEADER */}
       <header className="px-6 py-4 bg-white border-b border-gray-100 sticky top-0 z-40 flex items-center justify-between">
         <button onClick={() => router.back()} className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full transition">
           <ArrowLeft size={24} />
         </button>
         
-        {/* LOGO YAMOH (Icone seule) */}
         <div className="w-10 h-10 relative">
            <Image src="/logo.svg" alt="Yamoh" fill className="object-contain" />
         </div>
         
-        <div className="w-10"></div> {/* Espaceur pour centrer le logo */}
+        <div className="w-10"></div>
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-8">
@@ -115,19 +112,18 @@ export default function ProfilPage() {
         {activeTab === "about" ? (
           <div className="space-y-10 animate-in fade-in duration-300">
             
-            {/* CARTE D'IDENTITÉ VISUELLE */}
             <div className="flex items-center justify-between bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
               <div className="flex items-center gap-5">
                 <div className="relative">
                   <div className="w-20 h-20 bg-yamo-teal/10 rounded-[1.5rem] flex items-center justify-center text-3xl font-black text-yamo-teal">
-                    {fullName?.charAt(0).toUpperCase()}
+                    {fullName?.charAt(0).toUpperCase() || "U"}
                   </div>
                   <button className="absolute -bottom-2 -right-2 bg-yamo-teal p-2 rounded-full text-white border-4 border-white shadow-sm hover:scale-110 transition">
                     <Camera size={14} />
                   </button>
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-gray-900 leading-none mb-1">{fullName}</h2>
+                  <h2 className="text-2xl font-black text-gray-900 leading-none mb-1">{fullName || "Utilisateur"}</h2>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg uppercase tracking-wide">
                     <Award size={14} /> Membre Actif
                   </span>
@@ -135,7 +131,6 @@ export default function ProfilPage() {
               </div>
             </div>
 
-            {/* STATISTIQUES */}
             <div className="grid grid-cols-2 gap-4">
                <Link href="/paiements" className="bg-white p-6 rounded-[2rem] flex flex-col items-center gap-2 border border-gray-100 shadow-sm hover:border-yamo-teal transition group">
                  <div className="w-12 h-12 bg-yamo-teal/10 rounded-full flex items-center justify-center text-yamo-teal group-hover:scale-110 transition-transform">
@@ -153,7 +148,6 @@ export default function ProfilPage() {
                </Link>
             </div>
 
-            {/* VÉRIFICATIONS */}
             <div>
               <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 ml-2">Sécurité & Confiance</h3>
               <div className="bg-white border border-gray-100 rounded-[2rem] p-2 divide-y divide-gray-50 shadow-sm">
@@ -187,7 +181,6 @@ export default function ProfilPage() {
               </div>
             </div>
 
-            {/* PRÉFÉRENCES & BIO */}
             <div>
               <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 ml-2">Mon Style de Voyage</h3>
               
@@ -250,7 +243,7 @@ export default function ProfilPage() {
         )}
       </div>
 
-      {/* --- MODAL NUMÉRO DE TÉLÉPHONE --- */}
+      {/* MODALS */}
       {showPhoneModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm relative animate-in zoom-in duration-200">
@@ -268,7 +261,6 @@ export default function ProfilPage() {
         </div>
       )}
 
-      {/* --- MODAL MOT DE PASSE --- */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm relative animate-in zoom-in duration-200">
@@ -283,7 +275,6 @@ export default function ProfilPage() {
         </div>
       )}
 
-      {/* --- MODAL SUPPRESSION COMPTE --- */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-sm relative animate-in zoom-in duration-200">
@@ -304,8 +295,7 @@ export default function ProfilPage() {
   );
 }
 
-// --- PETITS COMPOSANTS D'AIDE ---
-// Remplacement d'icone introuvable par une icone standard
+// --- COMPOSANTS SVG ET AIDE ---
 const LogOutIcon = ({ size }: { size: number }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
 );
@@ -334,7 +324,6 @@ function PreferenceToggle({ icon, title, active }: { icon: any, title: string, a
         <div className={`p-3 rounded-full ${active ? 'bg-yamo-teal text-white' : 'bg-gray-50 text-gray-400'}`}>
           {icon}
         </div>
-        {/* Le switch ("bouton poussoir") */}
         <div className={`w-12 h-7 rounded-full relative transition-colors shadow-inner ${active ? 'bg-yamo-teal' : 'bg-gray-200'}`}>
           <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-sm ${active ? 'left-6' : 'left-1'}`} />
         </div>
