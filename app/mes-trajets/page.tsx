@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, QrCode, X, CheckCircle2, Download, Star, Ticket, History, CalendarDays, PauseCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, QrCode, X, CheckCircle2, Download, Star, Ticket, History, CalendarDays, PauseCircle, AlertTriangle, Loader2, Phone } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import QRCode from "react-qr-code"; 
@@ -22,7 +22,7 @@ export default function MesTrajets() {
   // MODALS
   const [selectedResa, setSelectedResa] = useState<any>(null); 
   const [ratingModal, setRatingModal] = useState<any>(null); 
-  const [sosModal, setSosModal] = useState<any>(null); // NOUVEAU : Modal SOS
+  const [sosModal, setSosModal] = useState<any>(null); 
 
   // ÉTATS DE NOTATION & SOS
   const [rating, setRating] = useState(0);
@@ -102,7 +102,6 @@ export default function MesTrajets() {
     alert("Le conducteur a été prévenu. Votre jour est conservé !");
   };
 
-  // --- NOUVEAU : GESTION DE L'ALERTE SOS ---
   const handleSOS = async () => {
     if (!sosType) {
       alert("Veuillez sélectionner un motif d'urgence.");
@@ -113,7 +112,6 @@ export default function MesTrajets() {
     let lat = null;
     let lng = null;
 
-    // Tentative de récupération GPS en urgence
     if (navigator.geolocation) {
       try {
         const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -149,7 +147,6 @@ export default function MesTrajets() {
     }
   };
 
-  // FILTRAGE INTELLIGENT DES BILLETS
   const billetsEnCours = reservations.filter(r => 
     r.statut !== 'valide' || (r.type_reservation === 'semaine' && r.jours_restants > 0)
   );
@@ -194,6 +191,9 @@ export default function MesTrajets() {
               const isAbonnement = resa.type_reservation === 'semaine';
               const joursRestants = resa.jours_restants !== undefined ? resa.jours_restants : (isAbonnement ? 5 : 1);
               const isRated = avisSoumis.includes(resa.id);
+              
+              // --- NOUVEAU : VÉRIFICATION DE L'APPROBATION ---
+              const isApproved = resa.statut === 'approuve' || resa.statut === 'valide';
 
               return (
                 <div key={resa.id} className={`rounded-[2rem] p-6 shadow-lg text-white relative overflow-hidden print:shadow-none print:border print:border-gray-300 print:text-black ${isUsed ? 'bg-gray-400' : 'bg-yamo-teal'}`}>
@@ -206,10 +206,15 @@ export default function MesTrajets() {
                         {isAbonnement ? <CalendarDays size={20}/> : null}
                         {isAbonnement ? 'PASS SEMAINE' : 'YAMOH TICKET'}
                       </span>
+                      
+                      {/* STATUTS DYNAMIQUES */}
                       {isUsed && <span className="bg-white text-gray-800 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider print:border print:border-gray-800">Terminé</span>}
-                      {!isUsed && isAbonnement && (
-                        <span className="bg-yamo-orange text-white text-xs font-black px-3 py-1 rounded-full uppercase">
-                          {joursRestants} jour(s) restant(s)
+                      {!isUsed && isApproved && <span className="bg-green-500 text-white text-xs font-black px-3 py-1 rounded-full uppercase">Approuvé</span>}
+                      {!isUsed && !isApproved && <span className="bg-orange-500 text-white text-xs font-black px-3 py-1 rounded-full uppercase animate-pulse">En attente</span>}
+                      
+                      {!isUsed && isAbonnement && isApproved && (
+                        <span className="bg-yamo-orange text-white text-xs font-black px-3 py-1 rounded-full uppercase ml-2">
+                          {joursRestants} jour(s)
                         </span>
                       )}
                     </div>
@@ -231,7 +236,13 @@ export default function MesTrajets() {
                         <div>
                           <p className="text-sm opacity-80 mb-1 font-medium">Conducteur</p>
                           <p className="font-bold text-lg">{resa.trajets.conducteur_nom}</p>
-                          <p className="text-sm opacity-80">{resa.trajets.vehicule}</p>
+                          
+                          {/* ON FLoute LE VÉHICULE SI NON APPROUVÉ */}
+                          {isApproved ? (
+                            <p className="text-sm opacity-80">{resa.trajets.vehicule}</p>
+                          ) : (
+                            <p className="text-sm opacity-80 blur-sm select-none">Véhicule masqué</p>
+                          )}
                         </div>
                         <div className="text-right">
                           <p className="text-sm opacity-80 mb-1 font-medium">Montant</p>
@@ -242,19 +253,35 @@ export default function MesTrajets() {
                       {/* BOUTONS D'ACTION */}
                       {!isUsed ? (
                         <div className="flex flex-col gap-2 print:hidden mt-2">
-                          <button onClick={() => setSelectedResa(resa)} className="w-full bg-white text-yamo-teal font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition shadow-sm">
-                            <QrCode size={20} /> Afficher le QR Code
-                          </button>
+                          
+                          {/* SI NON APPROUVÉ : MESSAGE D'ATTENTE */}
+                          {!isApproved ? (
+                            <div className="bg-orange-500/20 border border-orange-500/50 p-4 rounded-xl text-center">
+                              <p className="font-bold text-sm">Le conducteur doit accepter votre demande.</p>
+                              <p className="text-xs mt-1 opacity-80">Le QR Code et ses contacts s'afficheront ici.</p>
+                            </div>
+                          ) : (
+                            /* SI APPROUVÉ : AFFICHE LE QR CODE ET BOUTON D'APPEL */
+                            <>
+                              <button onClick={() => setSelectedResa(resa)} className="w-full bg-white text-yamo-teal font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition shadow-sm">
+                                <QrCode size={20} /> Afficher le QR Code
+                              </button>
+                              
+                              <button className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-white/30 transition text-sm mt-1">
+                                <Phone size={16} /> Appeler le conducteur
+                              </button>
+                            </>
+                          )}
                           
                           <div className="grid grid-cols-2 gap-2 mt-1">
-                            {isAbonnement && (
+                            {isAbonnement && isApproved && (
                               <button onClick={() => handleSignalerAbsence(resa)} className="w-full bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-white/30 transition text-[10px] md:text-xs">
                                 <PauseCircle size={16} /> Je passe mon tour
                               </button>
                             )}
                             
-                            {/* BOUTON SOS URGENCE */}
-                            <button onClick={() => setSosModal(resa)} className={`w-full bg-red-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-red-600 transition text-[10px] md:text-xs shadow-lg shadow-red-500/20 ${!isAbonnement ? 'col-span-2' : ''}`}>
+                            {/* BOUTON SOS URGENCE (Toujours visible si le trajet est en cours, même non abonnement) */}
+                            <button onClick={() => setSosModal(resa)} className={`w-full bg-red-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-red-600 transition text-[10px] md:text-xs shadow-lg shadow-red-500/20 ${!isAbonnement || !isApproved ? 'col-span-2' : ''}`}>
                               <AlertTriangle size={16} /> Signaler un problème
                             </button>
                           </div>
@@ -334,7 +361,7 @@ export default function MesTrajets() {
         </div>
       )}
 
-      {/* --- MODAL DE NOTATION (Inchangé) --- */}
+      {/* --- MODAL DE NOTATION --- */}
       {ratingModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-md relative animate-in zoom-in duration-300">

@@ -174,6 +174,23 @@ export default function DashboardConducteur() {
     });
   };
 
+  // --- NOUVEAU : ACCEPTER UN PASSAGER ---
+  const handleAccepterPassager = async (resa: any, trajet: any) => {
+    await supabase.from('reservations').update({ statut: 'approuve' }).eq('id', resa.id);
+
+    if (resa.passager_id) {
+      await supabase.from('notifications').insert([{
+        user_id: resa.passager_id,
+        titre: "Réservation confirmée ✅",
+        message: `Le conducteur a accepté votre réservation pour le trajet ${trajet.depart.split(',')[0]} → ${trajet.destination.split(',')[0]}. Vous pouvez maintenant voir son numéro et le contacter.`,
+        type: 'systeme'
+      }]);
+    }
+
+    setPassengerModal(null);
+    fetchDashboardData();
+  };
+
   // --- REFUSER UN PASSAGER ---
   const handleRefuserPassager = (resa: any, trajet: any) => {
     setConfirmDialog({
@@ -195,8 +212,8 @@ export default function DashboardConducteur() {
         if (resa.passager_id) {
           await supabase.from('notifications').insert([{
             user_id: resa.passager_id,
-            titre: "Réservation annulée ❌",
-            message: `Le conducteur a dû annuler votre place sur le trajet ${trajet.depart.split(',')[0]} → ${trajet.destination.split(',')[0]}. Vous ne serez pas facturé.`,
+            titre: "Réservation refusée ❌",
+            message: `Le conducteur a dû refuser votre demande sur le trajet ${trajet.depart.split(',')[0]} → ${trajet.destination.split(',')[0]}. Vous n'avez pas été facturé.`,
             type: 'alerte'
           }]);
         }
@@ -423,7 +440,16 @@ export default function DashboardConducteur() {
                             <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center font-bold text-yamo-teal text-xs border border-gray-200 group-hover:bg-yamo-teal group-hover:text-white transition">{resa.passager_nom.charAt(0).toUpperCase()}</div>
                             <div><p className="font-bold text-gray-900 text-sm leading-none">{resa.passager_nom}</p><p className="text-xs text-gray-500 mt-1">{resa.places_reservees || 1} place(s)</p></div>
                           </div>
-                          {resa.statut === 'valide' ? <span className="text-green-500 bg-green-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-green-100"><CheckCircle size={14} /> Embarqué</span> : <span className="text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-orange-100"><Clock size={14} /> En attente</span>}
+                          
+                          {/* NOUVELLE LOGIQUE D'AFFICHAGE DU STATUT PASSAGER */}
+                          {resa.statut === 'valide' ? (
+                            <span className="text-green-500 bg-green-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-green-100"><CheckCircle size={14} /> Embarqué</span>
+                          ) : resa.statut === 'approuve' ? (
+                            <span className="text-yamo-teal bg-yamo-teal/10 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-yamo-teal/20"><CheckCircle2 size={14} /> Approuvé</span>
+                          ) : (
+                            <span className="text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border border-orange-100"><Clock size={14} /> En attente</span>
+                          )}
+                          
                         </div>
                       ))}
                     </div>
@@ -441,10 +467,34 @@ export default function DashboardConducteur() {
             <button onClick={() => setPassengerModal(null)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20} /></button>
             <div className="w-20 h-20 bg-yamo-teal/10 text-yamo-teal rounded-full flex items-center justify-center mb-4 font-black text-3xl">{passengerModal.resa.passager_nom.charAt(0).toUpperCase()}</div>
             <h2 className="text-2xl font-black text-gray-900 text-center mb-1">{passengerModal.resa.passager_nom}</h2>
-            <p className="text-gray-500 text-sm mb-6 text-center">Réservation pour {passengerModal.resa.places_reservees || 1} place(s)<br/>Statut : {passengerModal.resa.statut === 'valide' ? 'Déjà scanné ✅' : 'En attente ⏳'}</p>
+            <p className="text-gray-500 text-sm mb-6 text-center">
+              Réservation pour {passengerModal.resa.places_reservees || 1} place(s)<br/>
+              Statut : {passengerModal.resa.statut === 'valide' ? 'Déjà scanné ✅' : passengerModal.resa.statut === 'approuve' ? 'Approuvé 👍' : "En attente d'acceptation ⏳"}
+            </p>
+            
             <div className="w-full flex flex-col gap-3">
-              <button className="w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 bg-gray-100 text-gray-600 hover:bg-gray-200 transition"><Phone size={20} /> Appeler le passager</button>
-              {passengerModal.resa.statut !== 'valide' && <button onClick={() => handleRefuserPassager(passengerModal.resa, passengerModal.trajet)} className="w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 mt-4"><UserMinus size={20} /> Refuser / Annuler</button>}
+              
+              {/* Le bouton d'appel n'est visible que si le passager est approuvé ou scanné */}
+              {(passengerModal.resa.statut === 'approuve' || passengerModal.resa.statut === 'valide') && (
+                <button className="w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+                  <Phone size={20} /> Appeler le passager
+                </button>
+              )}
+              
+              {/* BOUTON ACCEPTER (Uniquement si en attente) */}
+              {passengerModal.resa.statut === 'en_attente' && (
+                <button onClick={() => handleAccepterPassager(passengerModal.resa, passengerModal.trajet)} className="w-full font-black py-4 rounded-2xl flex justify-center items-center gap-2 bg-yamo-teal text-white hover:bg-[#115566] transition shadow-lg shadow-yamo-teal/20">
+                  <CheckCircle2 size={20} /> Accepter le passager
+                </button>
+              )}
+
+              {/* BOUTON REFUSER */}
+              {passengerModal.resa.statut !== 'valide' && (
+                <button onClick={() => handleRefuserPassager(passengerModal.resa, passengerModal.trajet)} className="w-full font-black py-4 rounded-2xl transition flex justify-center items-center gap-2 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100">
+                  <UserMinus size={20} /> Refuser / Annuler
+                </button>
+              )}
+              
             </div>
           </div>
         </div>

@@ -259,19 +259,43 @@ export default function ERPAdmin() {
     }
   };
 
+  // --- CORRECTION : JOINTURE MANUELLE ---
   const fetchPendingRecharges = async () => {
     setLoadingRecharges(true);
-    const { data, error } = await supabase
+    
+    // 1. Fetch des paiements sans la jointure relationnelle (qui cause l'erreur)
+    const { data: rechargesData, error: rechError } = await supabase
       .from('paiements')
-      .select('*, profiles(full_name, phone, solde_wallet)')
+      .select('*')
       .eq('type', 'recharge_attente');
       
-    if (error) setDbError(`Erreur Recharges : ${error.message}`);
-
-    if (data) {
-      const sortedData = data.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setPendingRecharges(sortedData);
+    if (rechError) {
+      setDbError(`Erreur Recharges : ${rechError.message}`);
+      setLoadingRecharges(false);
+      return;
     }
+
+    if (rechargesData && rechargesData.length > 0) {
+      // 2. Fetch des profils séparément
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone, solde_wallet');
+
+      // 3. Fusion (Simulation de la jointure)
+      const combined = rechargesData.map(rech => {
+        const profile = profilesData?.find(p => p.id === rech.user_id);
+        return {
+          ...rech,
+          profiles: profile || {}
+        };
+      });
+
+      const sortedData = combined.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setPendingRecharges(sortedData);
+    } else {
+      setPendingRecharges([]);
+    }
+    
     setLoadingRecharges(false);
   };
 
@@ -282,7 +306,7 @@ export default function ERPAdmin() {
     await supabase.from('paiements').update({ type: 'gain' }).eq('id', recharge.id);
     
     const nouveauSolde = (recharge.profiles?.solde_wallet || 0) + recharge.montant;
-    await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('user_id', recharge.user_id);
+    await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', recharge.user_id); // CORRECTION : 'id' et pas 'user_id' pour table profiles
     
     await supabase.from('notifications').insert([{
       user_id: recharge.user_id, 
@@ -517,12 +541,12 @@ export default function ERPAdmin() {
                         <p className="text-xs font-bold text-gray-500 flex items-center gap-1"><Phone size={12}/> {recharge.profiles?.phone || 'N/A'}</p>
                       </div>
                     </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl mb-4 border border-gray-100">
-                      <p className="text-3xl font-black text-center text-yamo-teal">{recharge.montant} F</p>
+                    <div className="bg-gray-50 p-4 rounded-2xl mb-4 border border-gray-100 text-center">
+                      <p className="text-3xl font-black text-yamo-teal">{recharge.montant} F</p>
                       <p className="text-center font-bold text-sm text-gray-600 mt-2 bg-white py-1.5 rounded-lg border border-gray-200">Via {recharge.methode}</p>
                     </div>
                     <button onClick={() => handleValiderRecharge(recharge)} className="mt-auto w-full bg-green-500 text-white font-black py-4 rounded-xl hover:bg-green-600 transition shadow-lg shadow-green-500/20 flex justify-center items-center gap-2">
-                      <CheckCircle size={20} /> Valider le dépôt
+                      <CheckCircle size={20} /> Valider le paiement
                     </button>
                   </div>
                 ))}
@@ -546,7 +570,7 @@ export default function ERPAdmin() {
                           <div className="w-10 h-10 bg-yamo-teal/10 text-yamo-teal font-black rounded-full flex items-center justify-center flex-shrink-0">{u.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
                           <div><p className="font-bold text-sm md:text-base truncate max-w-[150px]">{u.full_name || 'Utilisateur'}</p><p className="text-[10px] md:text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString()}</p></div>
                         </td>
-                        <td className="p-4 md:p-6"><span className={`px-2 py-1 md:px-3 md:py-1 text-[10px] md:text-xs font-black uppercase rounded-lg ${u.role === 'chauffeur' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>{u.role || 'Passager'}</span></td>
+                        <td className="p-4 md:p-6"><span className={`px-2 py-1 md:px-3 md:py-1 text-[10px] md:text-xs font-black uppercase rounded-lg ${u.role === 'chauffeur' ? 'bg-yamo-orange/10 text-yamo-orange' : 'bg-gray-100 text-gray-600'}`}>{u.role || 'Passager'}</span></td>
                         <td className="p-4 md:p-6 font-medium text-xs md:text-sm">{u.phone || 'N/A'}</td>
                         <td className="p-4 md:p-6">
                           {u.verification_status === 'verifie' ? <span className="text-green-600 font-bold text-xs md:text-sm flex items-center gap-1"><CheckCircle2 size={14}/> <span className="hidden md:inline">Vérifié</span></span> :
@@ -585,6 +609,7 @@ export default function ERPAdmin() {
                    <p className="text-2xl md:text-3xl font-black text-gray-900">{statsCompta.totalWallets.toLocaleString()} <span className="text-sm md:text-lg">F</span></p>
                  </div>
                </div>
+
                <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
                   <div className="p-4 md:p-6 border-b border-gray-100 flex items-center gap-4 bg-orange-50/50">
                     <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><AlertTriangle size={24}/></div>
