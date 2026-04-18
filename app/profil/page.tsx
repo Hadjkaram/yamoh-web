@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, User, Phone, MessageSquare, Music, Save, 
   Camera, ChevronRight, Star, ShieldCheck, Mail, Coins, 
   Lock, MapPin, Cigarette, Dog, Info, Award, Car, Clock,
-  X, AlertTriangle, UserX
+  X, AlertTriangle, UserX, Loader2
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,14 +14,18 @@ import { supabase } from "@/lib/supabase";
 
 export default function ProfilPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [activeTab, setActiveTab] = useState("about");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   const [user, setUser] = useState<any>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [prefs, setPrefs] = useState({ music: true, chat: true, smoke: false, pets: false });
   const [verificationStatus, setVerificationStatus] = useState("non_verifie");
   
@@ -45,6 +49,19 @@ export default function ProfilPage() {
         setBio(profile.bio || "");
         setVerificationStatus(profile.verification_status || "non_verifie");
         if (profile.preferences) setPrefs(profile.preferences);
+
+        // 1. On cherche d'abord s'il a une photo de profil personnalisée
+        if (profile.avatar_url) {
+          setAvatarUrl(profile.avatar_url);
+        } else {
+          // 2. Sinon, on essaie de récupérer le selfie du KYC !
+          const { data: files } = await supabase.storage.from('kyc_documents').list(session.user.id);
+          const selfieFile = files?.find(f => f.name.includes('selfie'));
+          if (selfieFile) {
+            const { data: urlData } = supabase.storage.from('kyc_documents').getPublicUrl(`${session.user.id}/${selfieFile.name}`);
+            setAvatarUrl(urlData.publicUrl);
+          }
+        }
       }
 
       // Solde Wallet
@@ -56,6 +73,41 @@ export default function ProfilPage() {
     }
     loadFullProfil();
   }, [router]);
+
+  // --- GESTION DE LA PHOTO DE PROFIL ---
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploadingImage(true);
+      if (!e.target.files || e.target.files.length === 0) return;
+      
+      const file = e.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `avatar_${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+
+      // 1. On envoie l'image dans le dossier "avatars" de Supabase
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
+      if (uploadError) throw uploadError;
+
+      // 2. On récupère le lien public de l'image
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const publicUrl = urlData.publicUrl;
+
+      // 3. On met à jour la table profiles
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      if (updateError) throw updateError;
+
+      // 4. On met à jour l'affichage
+      setAvatarUrl(publicUrl);
+      alert("Photo de profil mise à jour avec succès !");
+
+    } catch (error: any) {
+      alert("Erreur lors de l'ajout de la photo. Vérifiez que le dossier 'avatars' existe dans Supabase Storage.");
+      console.error(error);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -89,7 +141,6 @@ export default function ProfilPage() {
         </button>
         
         <div className="w-10 h-10 relative">
-           {/* LOGO YAMOH ICI */}
            <Image src="/Yamo_Logo.png" alt="Yamoh" fill className="object-contain" />
         </div>
         
@@ -115,14 +166,43 @@ export default function ProfilPage() {
             
             <div className="flex items-center justify-between bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
               <div className="flex items-center gap-5">
+                
+                {/* BLOC PHOTO DE PROFIL INTERACTIF */}
                 <div className="relative">
-                  <div className="w-20 h-20 bg-yamo-teal/10 rounded-[1.5rem] flex items-center justify-center text-3xl font-black text-yamo-teal">
-                    {fullName?.charAt(0).toUpperCase() || "U"}
+                  <div className="w-20 h-20 bg-yamo-teal/10 rounded-[1.5rem] flex items-center justify-center text-3xl font-black text-yamo-teal overflow-hidden relative">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="Profil" className="w-full h-full object-cover" />
+                    ) : (
+                      fullName?.charAt(0).toUpperCase() || "U"
+                    )}
+                    {/* Indicateur de chargement superposé */}
+                    {uploadingImage && (
+                       <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                         <Loader2 className="animate-spin text-yamo-teal" size={24} />
+                       </div>
+                    )}
                   </div>
-                  <button className="absolute -bottom-2 -right-2 bg-yamo-teal p-2 rounded-full text-white border-4 border-white shadow-sm hover:scale-110 transition">
+                  
+                  {/* L'input fichier caché */}
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    ref={fileInputRef} 
+                    onChange={handleImageUpload} 
+                    disabled={uploadingImage}
+                  />
+                  
+                  {/* Le bouton qui déclenche l'input */}
+                  <button 
+                    onClick={() => fileInputRef.current?.click()} 
+                    disabled={uploadingImage}
+                    className="absolute -bottom-2 -right-2 bg-yamo-teal p-2 rounded-full text-white border-4 border-white shadow-sm hover:scale-110 transition disabled:opacity-50"
+                  >
                     <Camera size={14} />
                   </button>
                 </div>
+
                 <div>
                   <h2 className="text-2xl font-black text-gray-900 leading-none mb-1">{fullName || "Utilisateur"}</h2>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg uppercase tracking-wide">
