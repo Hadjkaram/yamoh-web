@@ -36,6 +36,10 @@ export default function ProfilPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  // ÉTATS POUR LE CHANGEMENT DE MOT DE PASSE
+  const [newPassword, setNewPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
   useEffect(() => {
     async function loadFullProfil() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -45,16 +49,15 @@ export default function ProfilPage() {
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
       if (profile) {
         setFullName(profile.full_name || "");
-        setPhone(profile.phone || "");
+        // CORRECTION NUMÉRO : On va le chercher dans l'authentification directe si le profil est vide
+        setPhone(profile.phone || session.user.phone || "");
         setBio(profile.bio || "");
         setVerificationStatus(profile.verification_status || "non_verifie");
         if (profile.preferences) setPrefs(profile.preferences);
 
-        // 1. On cherche d'abord s'il a une photo de profil personnalisée
         if (profile.avatar_url) {
           setAvatarUrl(profile.avatar_url);
         } else {
-          // 2. Sinon, on essaie de récupérer le selfie du KYC !
           const { data: files } = await supabase.storage.from('kyc_documents').list(session.user.id);
           const selfieFile = files?.find(f => f.name.includes('selfie'));
           if (selfieFile) {
@@ -64,7 +67,6 @@ export default function ProfilPage() {
         }
       }
 
-      // Solde Wallet
       setStats({ 
         solde: profile?.solde_wallet || 0, 
         trajetsCount: 0
@@ -74,7 +76,6 @@ export default function ProfilPage() {
     loadFullProfil();
   }, [router]);
 
-  // --- GESTION DE LA PHOTO DE PROFIL ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setUploadingImage(true);
@@ -85,24 +86,20 @@ export default function ProfilPage() {
       const fileName = `avatar_${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
 
-      // 1. On envoie l'image dans le dossier "avatars" de Supabase
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
 
-      // 2. On récupère le lien public de l'image
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
       const publicUrl = urlData.publicUrl;
 
-      // 3. On met à jour la table profiles
       const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
       if (updateError) throw updateError;
 
-      // 4. On met à jour l'affichage
       setAvatarUrl(publicUrl);
       alert("Photo de profil mise à jour avec succès !");
 
     } catch (error: any) {
-      alert("Erreur lors de l'ajout de la photo. Vérifiez que le dossier 'avatars' existe dans Supabase Storage.");
+      alert("Erreur lors de l'ajout de la photo. Avez-vous configuré les Policies dans Storage ?");
       console.error(error);
     } finally {
       setUploadingImage(false);
@@ -116,6 +113,25 @@ export default function ProfilPage() {
     }).eq('id', user?.id);
     setSaving(false);
     if (!error) alert("Profil mis à jour avec succès !");
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      alert("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+    setUpdatingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setUpdatingPassword(false);
+
+    if (error) {
+      alert("Erreur : " + error.message);
+    } else {
+      alert("Mot de passe modifié avec succès !");
+      setNewPassword("");
+      setShowPasswordModal(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -134,17 +150,18 @@ export default function ProfilPage() {
   return (
     <main className="min-h-screen bg-white font-sans pb-20">
       
-      {/* HEADER */}
+      {/* HEADER AMÉLIORÉ - LOGO AGRANDI */}
       <header className="px-6 py-4 bg-white border-b border-gray-100 sticky top-0 z-40 flex items-center justify-between">
         <button onClick={() => router.back()} className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full transition">
           <ArrowLeft size={24} />
         </button>
         
-        <div className="w-10 h-10 relative">
+        {/* LOGO PLUS GRAND */}
+        <div className="w-28 h-10 relative">
            <Image src="/Yamo_Logo.png" alt="Yamoh" fill className="object-contain" />
         </div>
         
-        <div className="w-10"></div>
+        <div className="w-12"></div> {/* Espaceur ajusté */}
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-8">
@@ -167,15 +184,13 @@ export default function ProfilPage() {
             <div className="flex items-center justify-between bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
               <div className="flex items-center gap-5">
                 
-                {/* BLOC PHOTO DE PROFIL INTERACTIF */}
                 <div className="relative">
-                  <div className="w-20 h-20 bg-yamo-teal/10 rounded-[1.5rem] flex items-center justify-center text-3xl font-black text-yamo-teal overflow-hidden relative">
+                  <div className="w-20 h-20 bg-yamo-teal/10 rounded-[1.5rem] flex items-center justify-center text-3xl font-black text-yamo-teal overflow-hidden relative shadow-inner">
                     {avatarUrl ? (
                       <img src={avatarUrl} alt="Profil" className="w-full h-full object-cover" />
                     ) : (
                       fullName?.charAt(0).toUpperCase() || "U"
                     )}
-                    {/* Indicateur de chargement superposé */}
                     {uploadingImage && (
                        <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
                          <Loader2 className="animate-spin text-yamo-teal" size={24} />
@@ -183,7 +198,6 @@ export default function ProfilPage() {
                     )}
                   </div>
                   
-                  {/* L'input fichier caché */}
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -193,7 +207,6 @@ export default function ProfilPage() {
                     disabled={uploadingImage}
                   />
                   
-                  {/* Le bouton qui déclenche l'input */}
                   <button 
                     onClick={() => fileInputRef.current?.click()} 
                     disabled={uploadingImage}
@@ -253,8 +266,8 @@ export default function ProfilPage() {
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center text-green-600 flex-shrink-0"><Phone size={20} /></div>
                     <div>
-                      <p className="font-bold text-gray-900 text-sm">Numéro vérifié</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{phone || "Non renseigné"}</p>
+                      <p className="font-bold text-gray-900 text-sm">Numéro de téléphone</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{phone || "Appuyez pour voir"}</p>
                     </div>
                   </div>
                   <ChevronRight size={18} className="text-gray-300" />
@@ -329,29 +342,50 @@ export default function ProfilPage() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm relative animate-in zoom-in duration-200">
             <button onClick={() => setShowPhoneModal(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20} /></button>
-            <div className="w-16 h-16 bg-yamo-teal/10 text-yamo-teal rounded-full flex items-center justify-center mb-6"><Phone size={32} /></div>
+            <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-6"><Phone size={32} /></div>
             <h2 className="text-2xl font-black text-gray-900 mb-2">Votre numéro</h2>
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-4">
-              <p className="text-center font-bold text-xl text-gray-800 tracking-widest">{phone || "Numéro introuvable"}</p>
+              <p className="text-center font-bold text-xl text-gray-800 tracking-widest">{phone || "Introuvable"}</p>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed mb-6">
-              Pour des raisons de sécurité, la modification du numéro de téléphone sera bientôt disponible via validation par SMS. En cas d'urgence, contactez le support Yamoh.
+              Ce numéro est lié à votre authentification. Si vous souhaitez le modifier plus tard, vous devrez revalider un code SMS.
             </p>
-            <button onClick={() => setShowPhoneModal(false)} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition">J'ai compris</button>
+            <button onClick={() => setShowPhoneModal(false)} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition">Fermer</button>
           </div>
         </div>
       )}
 
+      {/* MODAL VRAI CHANGEMENT DE MOT DE PASSE */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm relative animate-in zoom-in duration-200">
             <button onClick={() => setShowPasswordModal(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20} /></button>
             <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-6"><Lock size={32} /></div>
-            <h2 className="text-2xl font-black text-gray-900 mb-2">Sécurité du compte</h2>
+            <h2 className="text-2xl font-black text-gray-900 mb-2">Changer le mot de passe</h2>
             <p className="text-gray-500 text-sm leading-relaxed mb-6">
-              Votre compte Yamoh utilise le système d'authentification sécurisé de Supabase. La modification du mot de passe directement depuis l'application sera activée dans la prochaine mise à jour.
+              Saisissez un nouveau mot de passe solide pour sécuriser votre compte Yamoh.
             </p>
-            <button onClick={() => setShowPasswordModal(false)} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-600 transition">Retour au profil</button>
+            
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Nouveau mot de passe</label>
+                <input 
+                  type="password" 
+                  required 
+                  placeholder="••••••••" 
+                  className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl outline-none focus:border-blue-500 font-bold"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={updatingPassword}
+                className="w-full bg-blue-500 text-white font-black py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-600 transition disabled:opacity-50 mt-4"
+              >
+                {updatingPassword ? "Mise à jour..." : "Valider le mot de passe"}
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -376,7 +410,6 @@ export default function ProfilPage() {
   );
 }
 
-// --- COMPOSANTS SVG ET AIDE ---
 const LogOutIcon = ({ size }: { size: number }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
 );
