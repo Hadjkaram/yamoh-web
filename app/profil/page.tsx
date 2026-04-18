@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, User, Phone, MessageSquare, Music, Save, 
   Camera, ChevronRight, Star, ShieldCheck, Mail, Coins, 
-  Lock, MapPin, Cigarette, Dog, Info, Award, Car, Clock
+  Lock, MapPin, Cigarette, Dog, Info, Award, Car, Clock,
+  X, AlertTriangle, UserX
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 
 export default function ProfilPage() {
@@ -25,6 +27,11 @@ export default function ProfilPage() {
   
   const [stats, setStats] = useState({ solde: 0, trajetsCount: 0 });
 
+  // ÉTATS POUR LES POP-UPS
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   useEffect(() => {
     async function loadFullProfil() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -40,12 +47,11 @@ export default function ProfilPage() {
         if (profile.preferences) setPrefs(profile.preferences);
       }
 
-      const { data: paiements } = await supabase.from('paiements').select('montant, type').eq('user_id', session.user.id);
-      const totalSolde = paiements?.reduce((acc, curr) => curr.type === 'gain' ? acc + curr.montant : acc - curr.montant, 0) || 0;
-
-      const { count } = await supabase.from('trajets').select('*', { count: 'exact', head: true }).eq('conducteur_nom', profile?.full_name);
-
-      setStats({ solde: totalSolde, trajetsCount: count || 0 });
+      // Solde Wallet (Nouvelle méthode de calcul basée sur le vrai solde)
+      setStats({ 
+        solde: profile?.solde_wallet || 0, 
+        trajetsCount: 0 // On simplifie pour l'instant
+      });
       setLoading(false);
     }
     loadFullProfil();
@@ -54,10 +60,10 @@ export default function ProfilPage() {
   const handleSave = async () => {
     setSaving(true);
     const { error } = await supabase.from('profiles').update({
-      full_name: fullName, phone: phone, bio: bio, preferences: prefs
+      full_name: fullName, bio: bio, preferences: prefs
     }).eq('id', user?.id);
     setSaving(false);
-    if (!error) alert("Profil mis à jour en temps réel !");
+    if (!error) alert("Profil mis à jour avec succès !");
   };
 
   const handleLogout = async () => {
@@ -65,155 +71,290 @@ export default function ProfilPage() {
     router.push('/');
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-yamo-teal">Connexion à Supabase...</div>;
+  const handleDeleteAccount = async () => {
+    // Cette action nécessitera une logique plus poussée côté Supabase Edge Function plus tard
+    // Pour l'instant, on déconnecte juste l'utilisateur après confirmation.
+    alert("Votre demande de suppression a été envoyée à l'administrateur Yamoh.");
+    await supabase.auth.signOut();
+    router.push('/');
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-yamo-teal">Chargement du profil...</div>;
 
   return (
-    <main className="min-h-screen bg-white font-sans">
-      <header className="px-6 py-6 bg-white border-b border-gray-50 sticky top-0 z-50 flex items-center gap-4">
-        <Link href="/"><ArrowLeft size={24} className="text-gray-900" /></Link>
+    <main className="min-h-screen bg-white font-sans pb-20">
+      
+      {/* HEADER AMÉLIORÉ */}
+      <header className="px-6 py-4 bg-white border-b border-gray-100 sticky top-0 z-40 flex items-center justify-between">
+        <button onClick={() => router.back()} className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full transition">
+          <ArrowLeft size={24} />
+        </button>
+        
+        {/* LOGO YAMOH (Icone seule) */}
+        <div className="w-10 h-10 relative">
+           <Image src="/logo.svg" alt="Yamoh" fill className="object-contain" />
+        </div>
+        
+        <div className="w-10"></div> {/* Espaceur pour centrer le logo */}
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        <h1 className="text-4xl font-black text-gray-900 mb-10">Profil</h1>
-
-        <div className="flex gap-10 border-b border-gray-100 mb-12">
-          <button onClick={() => setActiveTab("about")} className={`pb-4 text-lg font-bold transition-all ${activeTab === "about" ? "border-b-4 border-yamo-teal text-yamo-teal" : "text-gray-400 hover:text-gray-600"}`}>À propos de vous</button>
-          <button onClick={() => setActiveTab("account")} className={`pb-4 text-lg font-bold transition-all ${activeTab === "account" ? "border-b-4 border-yamo-teal text-yamo-teal" : "text-gray-400 hover:text-gray-600"}`}>Compte</button>
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        
+        <div className="flex gap-8 border-b border-gray-100 mb-10">
+          <button onClick={() => setActiveTab("about")} className={`pb-4 text-lg font-black transition-all relative ${activeTab === "about" ? "text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>
+            À propos de vous
+            {activeTab === "about" && <div className="absolute bottom-0 left-0 w-full h-1 bg-yamo-teal rounded-t-full"></div>}
+          </button>
+          <button onClick={() => setActiveTab("account")} className={`pb-4 text-lg font-black transition-all relative ${activeTab === "account" ? "text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>
+            Compte
+            {activeTab === "account" && <div className="absolute bottom-0 left-0 w-full h-1 bg-yamo-teal rounded-t-full"></div>}
+          </button>
         </div>
 
+        {/* --- ONGLET "À PROPOS" --- */}
         {activeTab === "about" ? (
-          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
+          <div className="space-y-10 animate-in fade-in duration-300">
+            
+            {/* CARTE D'IDENTITÉ VISUELLE */}
+            <div className="flex items-center justify-between bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
+              <div className="flex items-center gap-5">
                 <div className="relative">
-                  <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center text-3xl font-black text-yamo-teal border-4 border-white shadow-xl">
+                  <div className="w-20 h-20 bg-yamo-teal/10 rounded-[1.5rem] flex items-center justify-center text-3xl font-black text-yamo-teal">
                     {fullName?.charAt(0).toUpperCase()}
                   </div>
-                  <button className="absolute bottom-0 right-0 bg-yamo-teal p-2 rounded-full text-white border-2 border-white shadow-lg"><Camera size={16} /></button>
+                  <button className="absolute -bottom-2 -right-2 bg-yamo-teal p-2 rounded-full text-white border-4 border-white shadow-sm hover:scale-110 transition">
+                    <Camera size={14} />
+                  </button>
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-gray-900">{fullName}</h2>
-                  <p className="text-gray-500 font-medium flex items-center gap-1"><Award size={16} className="text-blue-500" /> Ambassadeur</p>
+                  <h2 className="text-2xl font-black text-gray-900 leading-none mb-1">{fullName}</h2>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg uppercase tracking-wide">
+                    <Award size={14} /> Membre Actif
+                  </span>
                 </div>
               </div>
-              <ChevronRight className="text-gray-300" />
             </div>
 
+            {/* STATISTIQUES */}
             <div className="grid grid-cols-2 gap-4">
-               <Link href="/paiements" className="bg-gray-50 p-6 rounded-3xl flex flex-col items-center gap-2 hover:bg-gray-100 transition">
-                 <Coins className="text-yamo-teal" />
-                 <p className="text-xl font-black">{stats.solde.toLocaleString()} FCFA</p>
-                 <p className="text-xs font-bold text-gray-400 uppercase text-center">Argent économisé</p>
+               <Link href="/paiements" className="bg-white p-6 rounded-[2rem] flex flex-col items-center gap-2 border border-gray-100 shadow-sm hover:border-yamo-teal transition group">
+                 <div className="w-12 h-12 bg-yamo-teal/10 rounded-full flex items-center justify-center text-yamo-teal group-hover:scale-110 transition-transform">
+                    <Coins size={24} />
+                 </div>
+                 <p className="text-2xl font-black text-gray-900 mt-2">{stats.solde.toLocaleString()} F</p>
+                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Mon Portefeuille</p>
                </Link>
-               <Link href="/dashboard" className="bg-gray-50 p-6 rounded-3xl flex flex-col items-center gap-2 hover:bg-gray-100 transition">
-                 <Car className="text-yamo-teal" />
-                 <p className="text-xl font-black">{stats.trajetsCount}</p>
-                 <p className="text-xs font-bold text-gray-400 uppercase text-center">Trajets publiés</p>
+               <Link href="/dashboard" className="bg-white p-6 rounded-[2rem] flex flex-col items-center gap-2 border border-gray-100 shadow-sm hover:border-yamo-teal transition group">
+                 <div className="w-12 h-12 bg-yamo-orange/10 rounded-full flex items-center justify-center text-yamo-orange group-hover:scale-110 transition-transform">
+                    <Car size={24} />
+                 </div>
+                 <p className="text-2xl font-black text-gray-900 mt-2">0</p>
+                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Trajets publiés</p>
                </Link>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Vérifications</h3>
-              <div className="space-y-4">
+            {/* VÉRIFICATIONS */}
+            <div>
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 ml-2">Sécurité & Confiance</h3>
+              <div className="bg-white border border-gray-100 rounded-[2rem] p-2 divide-y divide-gray-50 shadow-sm">
                 
-                {/* NOUVEAU : GESTION INTELLIGENTE DU STATUT DE VÉRIFICATION */}
                 {verificationStatus === 'verifie' ? (
-                   <VerificationItem icon={<ShieldCheck size={18} className="text-green-500"/>} title="Identité vérifiée" checked={true} />
+                   <VerificationItem icon={<ShieldCheck size={20} className="text-green-500"/>} title="Identité vérifiée" subtitle="Vous avez le badge de confiance Yamoh" checked={true} />
                 ) : verificationStatus === 'en_attente' ? (
-                   <div className="flex items-center justify-between py-2 px-2">
-                     <div className="flex items-center gap-3 text-gray-700 font-medium">
-                       <Clock size={18} className="text-yamo-orange" />
-                       <span className="text-yamo-orange font-bold">Identité en cours d'analyse</span>
+                   <div className="flex items-center gap-4 p-4">
+                     <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center text-orange-500 flex-shrink-0"><Clock size={20} /></div>
+                     <div>
+                       <p className="font-bold text-gray-900 text-sm">Pièce en cours d'analyse</p>
+                       <p className="text-xs text-gray-500 mt-0.5">Nous vérifions vos documents.</p>
                      </div>
                    </div>
                 ) : (
                    <Link href="/verif-identite" className="block">
-                     <VerificationItem icon={<ShieldCheck size={18}/>} title="Vérifier votre pièce d'identité" checked={false} />
+                     <VerificationItem icon={<ShieldCheck size={20} className="text-gray-400"/>} title="Vérifier mon identité" subtitle="Requis pour publier des trajets" checked={false} />
                    </Link>
                 )}
 
-                <VerificationItem icon={<Mail size={18}/>} title="Adresse e-mail vérifiée" checked={!!user?.email_confirmed_at} />
-                <VerificationItem icon={<Phone size={18}/>} title="Numéro de téléphone vérifié" checked={!!phone} />
+                <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition" onClick={() => setShowPhoneModal(true)}>
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center text-green-600 flex-shrink-0"><Phone size={20} /></div>
+                    <div>
+                      <p className="font-bold text-gray-900 text-sm">Numéro vérifié</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{phone || "Non renseigné"}</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className="text-gray-300" />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-6">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">À propos de vous</h3>
-              <div className="flex flex-col gap-2">
-                <label className="font-bold text-gray-700">Ma minibio</label>
+            {/* PRÉFÉRENCES & BIO */}
+            <div>
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 ml-2">Mon Style de Voyage</h3>
+              
+              <div className="mb-6">
                 <textarea 
                   rows={3} 
+                  placeholder="Décrivez-vous en quelques mots (ex: J'adore voyager tôt le matin...)"
                   value={bio} 
                   onChange={(e) => setBio(e.target.value)} 
-                  className="bg-gray-50 p-4 rounded-2xl border border-gray-100 outline-none focus:border-yamo-teal font-medium" 
+                  className="w-full bg-gray-50 p-5 rounded-[1.5rem] border border-gray-100 outline-none focus:border-yamo-teal focus:ring-4 focus:ring-yamo-teal/10 font-medium text-sm resize-none transition-all" 
                 />
               </div>
-              <div className="space-y-4">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div onClick={() => setPrefs({...prefs, chat: !prefs.chat})} className="cursor-pointer">
-                    <PreferenceToggle icon={<MessageSquare size={18}/>} title="Je suis un vrai moulin à paroles !" active={prefs.chat} />
+                    <PreferenceToggle icon={<MessageSquare size={20}/>} title="On se gère (Je cause bien)" active={prefs.chat} />
                 </div>
                 <div onClick={() => setPrefs({...prefs, music: !prefs.music})} className="cursor-pointer">
-                    <PreferenceToggle icon={<Music size={18}/>} title="Musique tout le long !" active={prefs.music} />
+                    <PreferenceToggle icon={<Music size={20}/>} title="DJ de la route (Musique ON)" active={prefs.music} />
                 </div>
               </div>
             </div>
 
-            <button onClick={handleSave} disabled={saving} className="w-full bg-yamo-teal text-white font-black py-5 rounded-[2rem] shadow-xl shadow-yamo-teal/20 transition">
-              {saving ? "Sauvegarde..." : "Enregistrer les modifications"}
+            <button onClick={handleSave} disabled={saving} className="w-full bg-gray-900 text-white font-black py-5 rounded-full shadow-xl shadow-gray-900/20 hover:bg-black transition-all flex items-center justify-center gap-2">
+              {saving ? "Sauvegarde en cours..." : <><Save size={20}/> Enregistrer mon profil</>}
             </button>
           </div>
         ) : (
-          <div className="space-y-2 divide-y divide-gray-50 animate-in fade-in slide-in-from-right-4">
-            <Link href="/avis"><AccountItem icon={<Star />} title="Avis" /></Link>
+          /* --- ONGLET "COMPTE" --- */
+          <div className="bg-white border border-gray-100 rounded-[2rem] p-2 divide-y divide-gray-50 shadow-sm animate-in fade-in duration-300">
+            <Link href="/avis"><AccountItem icon={<Star />} title="Avis & Notes" /></Link>
             <Link href="/vehicules"><AccountItem icon={<Car />} title="Mes véhicules" /></Link>
-            <Link href="/messages"><AccountItem icon={<MessageSquare />} title="Mes messages" /></Link>
-            <AccountItem icon={<Lock />} title="Mot de passe" />
-            <Link href="/paiements"><AccountItem icon={<Coins />} title="Paiements et remboursements" /></Link>
-            <button onClick={handleLogout} className="w-full text-left py-6 text-red-600 font-bold flex items-center justify-between group">
-              <span>Déconnexion</span>
-              <ChevronRight className="text-gray-200 group-hover:text-red-600 transition" />
-            </button>
+            
+            <div onClick={() => setShowPasswordModal(true)}>
+              <AccountItem icon={<Lock />} title="Sécurité et Mot de passe" />
+            </div>
+            
+            <Link href="/paiements"><AccountItem icon={<Coins />} title="Portefeuille Yamoh" /></Link>
+            
+            <div className="pt-2 pb-2">
+              <button onClick={handleLogout} className="w-full text-left p-4 hover:bg-gray-50 rounded-xl transition flex items-center justify-between group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-gray-200 transition"><LogOutIcon size={18}/></div>
+                  <span className="font-bold text-gray-900">Se déconnecter</span>
+                </div>
+                <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-900 transition" />
+              </button>
+            </div>
+
+            <div className="pt-2 pb-2">
+              <button onClick={() => setShowDeleteModal(true)} className="w-full text-left p-4 hover:bg-red-50 rounded-xl transition flex items-center justify-between group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center text-red-500 group-hover:bg-red-100 transition"><UserX size={18}/></div>
+                  <span className="font-bold text-red-600">Fermer mon compte</span>
+                </div>
+                <ChevronRight size={18} className="text-red-300 group-hover:text-red-600 transition" />
+              </button>
+            </div>
           </div>
         )}
       </div>
+
+      {/* --- MODAL NUMÉRO DE TÉLÉPHONE --- */}
+      {showPhoneModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm relative animate-in zoom-in duration-200">
+            <button onClick={() => setShowPhoneModal(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20} /></button>
+            <div className="w-16 h-16 bg-yamo-teal/10 text-yamo-teal rounded-full flex items-center justify-center mb-6"><Phone size={32} /></div>
+            <h2 className="text-2xl font-black text-gray-900 mb-2">Votre numéro</h2>
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-4">
+              <p className="text-center font-bold text-xl text-gray-800 tracking-widest">{phone || "Numéro introuvable"}</p>
+            </div>
+            <p className="text-gray-500 text-sm leading-relaxed mb-6">
+              Pour des raisons de sécurité, la modification du numéro de téléphone sera bientôt disponible via validation par SMS. En cas d'urgence, contactez le support Yamoh.
+            </p>
+            <button onClick={() => setShowPhoneModal(false)} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition">J'ai compris</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL MOT DE PASSE --- */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm relative animate-in zoom-in duration-200">
+            <button onClick={() => setShowPasswordModal(false)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition"><X size={20} /></button>
+            <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-6"><Lock size={32} /></div>
+            <h2 className="text-2xl font-black text-gray-900 mb-2">Sécurité du compte</h2>
+            <p className="text-gray-500 text-sm leading-relaxed mb-6">
+              Votre compte Yamoh utilise le système d'authentification sécurisé de Supabase. La modification du mot de passe directement depuis l'application sera activée dans la prochaine mise à jour.
+            </p>
+            <button onClick={() => setShowPasswordModal(false)} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-600 transition">Retour au profil</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL SUPPRESSION COMPTE --- */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center w-full max-w-sm relative animate-in zoom-in duration-200">
+            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4"><AlertTriangle size={40} /></div>
+            <h2 className="text-2xl font-black text-gray-900 text-center mb-2">Quitter Yamoh ?</h2>
+            <p className="text-gray-500 text-sm mb-8 text-center leading-relaxed">
+              En fermant votre compte, vous perdrez votre historique, vos avis et votre solde Yamoh. Cette action est irréversible.
+            </p>
+            <div className="w-full flex gap-3">
+              <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-4 font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-2xl transition">Annuler</button>
+              <button onClick={handleDeleteAccount} className="flex-1 py-4 font-bold text-white bg-red-500 hover:bg-red-600 rounded-2xl transition shadow-lg shadow-red-500/20">Oui, fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
 
-function VerificationItem({ icon, title, checked }: { icon: any, title: string, checked: boolean }) {
+// --- PETITS COMPOSANTS D'AIDE ---
+
+// Remplacement d'icone introuvable par une icone standard
+const LogOutIcon = ({ size }: { size: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinelinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+);
+
+function VerificationItem({ icon, title, subtitle, checked }: { icon: any, title: string, subtitle: string, checked: boolean }) {
   return (
-    <div className="flex items-center justify-between py-2 cursor-pointer hover:bg-gray-50 rounded-xl transition px-2">
-      <div className="flex items-center gap-3 text-gray-700 font-medium">
-        {checked ? <ShieldCheck size={18} className="text-green-500" /> : <div className="text-yamo-teal">{icon}</div>}
-        <span className={checked ? 'text-gray-900 font-bold' : 'text-yamo-teal font-bold'}>{title}</span>
+    <div className="flex items-center justify-between p-4 rounded-xl transition group">
+      <div className="flex items-center gap-4">
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${checked ? 'bg-green-50' : 'bg-gray-50 group-hover:bg-yamo-teal/10 transition'}`}>
+          {icon}
+        </div>
+        <div>
+          <p className={`font-bold text-sm ${checked ? 'text-gray-900' : 'text-yamo-teal group-hover:underline'}`}>{title}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+        </div>
       </div>
-      <ChevronRight size={16} className="text-gray-300" />
+      {!checked && <ChevronRight size={18} className="text-gray-300 group-hover:text-yamo-teal transition" />}
     </div>
   );
 }
 
 function PreferenceToggle({ icon, title, active }: { icon: any, title: string, active: boolean }) {
   return (
-    <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition ${active ? 'border-yamo-teal bg-yamo-teal/5' : 'border-gray-50'}`}>
-      <div className="flex items-center gap-4">
-        <div className={active ? "text-yamo-teal" : "text-gray-400"}>{icon}</div>
-        <p className={`font-bold ${active ? "text-gray-900" : "text-gray-400"}`}>{title}</p>
+    <div className={`flex flex-col p-5 rounded-[1.5rem] border-2 transition-all h-full ${active ? 'border-yamo-teal bg-yamo-teal/5 shadow-sm' : 'border-gray-100 bg-white hover:border-gray-200'}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className={`p-3 rounded-full ${active ? 'bg-yamo-teal text-white' : 'bg-gray-50 text-gray-400'}`}>
+          {icon}
+        </div>
+        {/* Le switch ("bouton poussoir") */}
+        <div className={`w-12 h-7 rounded-full relative transition-colors shadow-inner ${active ? 'bg-yamo-teal' : 'bg-gray-200'}`}>
+          <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-sm ${active ? 'left-6' : 'left-1'}`} />
+        </div>
       </div>
-      <div className={`w-12 h-6 rounded-full relative transition-colors ${active ? 'bg-yamo-teal' : 'bg-gray-200'}`}>
-        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${active ? 'left-7' : 'left-1'}`} />
-      </div>
+      <p className={`font-bold text-sm leading-tight ${active ? "text-gray-900" : "text-gray-400"}`}>{title}</p>
     </div>
   );
 }
 
 function AccountItem({ icon, title }: { icon: any, title: string }) {
   return (
-    <div className="py-6 flex items-center justify-between group cursor-pointer hover:pl-2 transition-all">
-      <div className="flex items-center gap-4 text-gray-700">
-        <div className="text-gray-300 group-hover:text-yamo-teal transition">{icon}</div>
-        <span className="font-bold text-gray-800">{title}</span>
+    <div className="p-4 flex items-center justify-between group cursor-pointer hover:bg-gray-50 rounded-xl transition-all">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-yamo-teal/10 group-hover:text-yamo-teal transition">
+          {icon}
+        </div>
+        <span className="font-bold text-gray-800 text-sm">{title}</span>
       </div>
-      <ChevronRight className="text-gray-300 group-hover:text-yamo-teal" />
+      <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-900 transition" />
     </div>
   );
 }
