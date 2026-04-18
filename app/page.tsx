@@ -7,7 +7,7 @@ import {
   Search, Calendar, User, PlusCircle, ShieldCheck, 
   SmartphoneNfc, PiggyBank, LogOut, ChevronDown, 
   Car, MessageSquare, CreditCard, Ticket, ArrowRight,
-  Share2, MapPin, History, Clock, Users
+  Share2, MapPin, History, Clock, Users, Navigation, Compass
 } from "lucide-react";
 import { supabase } from "@/lib/supabase"; 
 import NotificationBell from "@/components/NotificationBell";
@@ -130,12 +130,18 @@ export default function Home() {
   const [liveTrips, setLiveTrips] = useState<any[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
 
+  // --- NOUVEAU : WIDGET GPS CHAUFFEUR ---
+  const [activeTrip, setActiveTrip] = useState<any>(null);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) checkActiveTrip(session.user);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) checkActiveTrip(session.user);
+      else setActiveTrip(null);
     });
 
     // --- RÉCUPÉRATION DES TRAJETS DEPUIS SUPABASE ---
@@ -146,6 +152,8 @@ export default function Home() {
         .from('trajets')
         .select('*')
         .gte('date_depart', today)
+        // On ne montre que les trajets prévus ou en cours sur l'accueil, pas ceux terminés
+        .neq('statut_course', 'termine') 
         .order('date_depart', { ascending: true })
         .limit(6); 
 
@@ -159,6 +167,20 @@ export default function Home() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // --- VÉRIFIER SI LE CHAUFFEUR A UNE COURSE EN COURS ---
+  const checkActiveTrip = async (currentUser: any) => {
+    if (currentUser?.user_metadata?.role !== 'chauffeur') return;
+    
+    const { data } = await supabase
+      .from('trajets')
+      .select('id, depart, destination')
+      .eq('user_id', currentUser.id)
+      .eq('statut_course', 'en_cours')
+      .single(); // Un chauffeur ne peut avoir qu'une seule course en cours
+
+    if (data) setActiveTrip(data);
+  };
 
   const handleSearch = () => {
     if (!depart || !destination) {
@@ -197,6 +219,14 @@ export default function Home() {
           background-repeat: repeat-x;
           background-size: 800px 100%;
           background-position: bottom;
+        }
+        @keyframes pulse-ring {
+          0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+          70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+        .animate-radar {
+          animation: pulse-ring 2s infinite cubic-bezier(0.66, 0, 0, 1);
         }
       `}</style>
 
@@ -272,6 +302,27 @@ export default function Home() {
           On fait la route ensemble.
         </h1>
 
+        {/* NOUVEAU : WIDGET GPS CHAUFFEUR EN COURS */}
+        {activeTrip && (
+          <div className="relative z-30 bg-green-50 border-2 border-green-500 rounded-[2rem] p-6 w-full max-w-3xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl animate-in zoom-in duration-300">
+            <div className="flex items-center gap-4 text-left">
+              <div className="w-14 h-14 bg-green-500 text-white rounded-full flex items-center justify-center animate-radar shadow-lg">
+                <Navigation size={28} className="animate-pulse" />
+              </div>
+              <div>
+                <p className="text-green-700 font-black uppercase text-xs tracking-widest mb-1">Course en direct</p>
+                <h3 className="text-xl font-black text-gray-900 line-clamp-1">{activeTrip.destination.split(',')[0]}</h3>
+                <p className="text-sm font-bold text-gray-500">Depuis {activeTrip.depart.split(',')[0]}</p>
+              </div>
+            </div>
+            <Link href="/dashboard" className="w-full md:w-auto">
+              <button className="w-full bg-gray-900 text-white font-black px-8 py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-black transition shadow-xl">
+                <Compass size={20} /> Gérer ma course
+              </button>
+            </Link>
+          </div>
+        )}
+
         <div className="relative z-30 bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
           
           <LocationAutocomplete 
@@ -334,8 +385,17 @@ export default function Home() {
               const lienDest = trip.destination ? encodeURIComponent(trip.destination.split(',')[0]) : "";
               const lienDate = trip.date_depart ? trip.date_depart.split('T')[0] : "";
               
+              // On vérifie si le trajet est "en_cours" pour afficher le badge Live
+              const isRunning = trip.statut_course === 'en_cours';
+              
               return (
-                <div key={trip.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
+                <div key={trip.id} className={`bg-white rounded-[2rem] p-6 shadow-sm border relative hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group ${isRunning ? 'border-green-500 ring-2 ring-green-50' : 'border-gray-100'}`}>
+                  
+                  {isRunning && (
+                     <div className="absolute -top-3 -right-3 bg-green-500 text-white text-xs font-black px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
+                        <div className="w-2 h-2 bg-white rounded-full"></div> En Route
+                     </div>
+                  )}
                   
                   <div className="flex justify-between items-center border-b border-gray-50 pb-4 mb-4">
                     <div className="flex items-center gap-2 text-yamo-teal font-bold bg-yamo-teal/10 px-3 py-1.5 rounded-xl text-sm">
@@ -402,7 +462,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* --- CONFIANCE & CHOIX (MIS À JOUR AVEC LE JARGON) --- */}
+      {/* --- CONFIANCE & CHOIX --- */}
       <section className="py-24 bg-gray-50 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-16 mb-24">
@@ -423,7 +483,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* LA SECTION MODIFIÉE SANS LE VTC */}
           <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">Choisis ton wé, on gère le reste !</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
             <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer group">
