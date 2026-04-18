@@ -142,7 +142,7 @@ export default function PublierTrajet() {
           .single();
           
         if (profileData) {
-          setSolde(profileData.solde_wallet || 0);
+          setSolde(Number(profileData.solde_wallet) || 0); // Sécurisation du type Number
           const infosVehicule = [profileData.vehicule_marque, profileData.vehicule_couleur].filter(Boolean).join(" - ");
           if (infosVehicule) setVehicule(infosVehicule);
         }
@@ -226,7 +226,8 @@ export default function PublierTrajet() {
               <div className="flex-1">
                 <h3 className="font-black text-red-900 text-lg">Votre portefeuille est vide !</h3>
                 <p className="text-red-700 font-medium text-sm mt-1">Vous devez recharger au moins 100 FCFA sur votre compte Yamoh pour publier des annonces et débloquer ce formulaire.</p>
-                <Link href="/paiements" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm mt-4 hover:bg-red-600 transition shadow-lg shadow-red-500/20">
+                {/* 🎯 CORRECTION ICI : Redirection vers /recharge au lieu de /paiements */}
+                <Link href="/recharge" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm mt-4 hover:bg-red-600 transition shadow-lg shadow-red-500/20">
                   <Wallet size={16}/> Recharger maintenant
                 </Link>
               </div>
