@@ -25,7 +25,8 @@ export default function ERPAdmin() {
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
   const [loadingKyc, setLoadingKyc] = useState(true);
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [userDocs, setUserDocs] = useState<{recto?: string, verso?: string, selfie?: string} | null>(null);
+  // CORRECTION : On ajoute permis et cartegrise dans l'état
+  const [userDocs, setUserDocs] = useState<{recto?: string, verso?: string, selfie?: string, permis?: string, cartegrise?: string} | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
   
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -82,7 +83,6 @@ export default function ERPAdmin() {
   }, [activeMenu, isAuthorized]);
 
   const fetchAlertes = async () => {
-    // Remplacer plus tard par : const { data } = await supabase.from('alertes').select('*').order('created_at', { ascending: false });
     setAlertes([
       { id: 1, type: 'SOS_PASSAGER', message: "Conduite dangereuse !", trajet: "Abidjan -> Yamoussoukro", passager: "Aicha K.", chauffeur: "Ibrahim", date: new Date().toISOString(), lat: 5.3096, lng: -4.0126 }
     ]);
@@ -105,6 +105,9 @@ export default function ERPAdmin() {
         if (file.name.includes('recto')) docs.recto = urlData.publicUrl;
         if (file.name.includes('verso')) docs.verso = urlData.publicUrl;
         if (file.name.includes('selfie')) docs.selfie = urlData.publicUrl;
+        // CORRECTION : On récupère aussi permis et carte grise
+        if (file.name.includes('permis')) docs.permis = urlData.publicUrl;
+        if (file.name.includes('cartegrise')) docs.cartegrise = urlData.publicUrl;
       });
       setUserDocs(docs);
     } else setUserDocs({});
@@ -443,7 +446,6 @@ export default function ERPAdmin() {
             </div>
           )}
 
-          {/* LA PARTIE MANQUANTE : KYC ET USERS */}
           {activeMenu === "kyc" && (
              loadingKyc ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
              pendingUsers.length === 0 ? (
@@ -593,7 +595,7 @@ export default function ERPAdmin() {
         </div>
       </main>
 
-      {/* --- MODAL KYC --- */}
+      {/* --- MODAL KYC : CORRIGÉ POUR AFFICHER PERMIS ET CARTE GRISE --- */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
@@ -608,6 +610,7 @@ export default function ERPAdmin() {
             <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-gray-100">
               {loadingDocs ? <div className="text-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin mx-auto mb-4" /><p className="font-bold">Extraction sécurisée des fichiers...</p></div> :
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                  {/* Identité Standard */}
                   <div className="space-y-2">
                     <h4 className="font-black text-gray-700 uppercase text-xs tracking-widest bg-white inline-block px-3 py-1 rounded-full shadow-sm">Recto / Passeport</h4>
                     {userDocs?.recto ? <a href={userDocs.recto} target="_blank" rel="noreferrer"><img src={userDocs.recto} className="w-full h-48 md:h-64 object-cover rounded-2xl border-4 border-white shadow-md hover:scale-[1.02] transition cursor-zoom-in" /></a> : <div className="w-full h-48 md:h-64 bg-white/50 border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center font-bold text-gray-400">Document Manquant</div>}
@@ -624,6 +627,24 @@ export default function ERPAdmin() {
                       <a href={userDocs.verso} target="_blank" rel="noreferrer"><img src={userDocs.verso} className="w-full h-48 md:h-64 object-cover rounded-2xl border-4 border-white shadow-md md:w-1/2 hover:scale-[1.02] transition cursor-zoom-in" /></a>
                     </div>
                   }
+
+                  {/* CORRECTION : Affichage Permis & Carte Grise si c'est un chauffeur */}
+                  {selectedUser.role === 'chauffeur' && (
+                    <>
+                      <div className="col-span-1 md:col-span-2 border-t-2 border-dashed border-gray-300 my-4"></div>
+                      
+                      <div className="space-y-2">
+                        <h4 className="font-black text-yamo-orange uppercase text-xs tracking-widest bg-orange-50 inline-block px-3 py-1 rounded-full shadow-sm">Permis de Conduire</h4>
+                        {userDocs?.permis ? <a href={userDocs.permis} target="_blank" rel="noreferrer"><img src={userDocs.permis} className="w-full h-48 md:h-64 object-cover rounded-2xl border-4 border-white shadow-md hover:scale-[1.02] transition cursor-zoom-in" /></a> : <div className="w-full h-48 md:h-64 bg-white/50 border-2 border-dashed border-orange-300 rounded-2xl flex items-center justify-center font-bold text-orange-400">Permis Manquant</div>}
+                      </div>
+
+                      <div className="space-y-2">
+                        <h4 className="font-black text-yamo-orange uppercase text-xs tracking-widest bg-orange-50 inline-block px-3 py-1 rounded-full shadow-sm">Carte Grise</h4>
+                        {userDocs?.cartegrise ? <a href={userDocs.cartegrise} target="_blank" rel="noreferrer"><img src={userDocs.cartegrise} className="w-full h-48 md:h-64 object-cover rounded-2xl border-4 border-white shadow-md hover:scale-[1.02] transition cursor-zoom-in" /></a> : <div className="w-full h-48 md:h-64 bg-white/50 border-2 border-dashed border-orange-300 rounded-2xl flex items-center justify-center font-bold text-orange-400">Carte Grise Manquante</div>}
+                      </div>
+                    </>
+                  )}
+
                 </div>
               }
             </div>
