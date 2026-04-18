@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image"; // <-- AJOUT DE L'IMPORT IMAGE ICI
+import Image from "next/image";
 import { 
   LayoutDashboard, ShieldCheck, Users, Map, Wallet, Search, 
   CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
@@ -26,7 +26,6 @@ export default function ERPAdmin() {
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
   const [loadingKyc, setLoadingKyc] = useState(true);
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  // CORRECTION : On ajoute permis et cartegrise dans l'état
   const [userDocs, setUserDocs] = useState<{recto?: string, verso?: string, selfie?: string, permis?: string, cartegrise?: string} | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
   
@@ -299,9 +298,9 @@ export default function ERPAdmin() {
   const SidebarContent = () => (
     <>
       <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-        {/* LE LOGO AGRANDI EST LÀ */}
-        <div className="w-32 h-10 relative">
-           <Image src="/Yamo_Logo.png" alt="Yamoh ERP" fill className="object-contain" />
+        {/* LE LOGO AGRANDI AU MAXIMUM DE LA LARGEUR DISPONIBLE */}
+        <div className="w-52 h-16 relative">
+           <Image src="/Yamo_Logo.png" alt="Yamoh ERP" fill className="object-contain object-left" />
         </div>
         <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white"><X size={24} /></button>
       </div>
@@ -568,7 +567,7 @@ export default function ERPAdmin() {
                     <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><AlertTriangle size={24}/></div>
                     <div>
                       <h3 className="text-lg md:text-xl font-black text-gray-900">Recharge d'urgence / Espèces</h3>
-                      <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur.</p>
+                      <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur (Paiement physique ou bug API).</p>
                     </div>
                   </div>
                   <table className="w-full text-left border-collapse min-w-[500px]">
