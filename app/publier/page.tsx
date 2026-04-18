@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-// --- COMPOSANT D'AUTO-COMPLÉTION (INCHANGÉ) ---
+// --- COMPOSANT D'AUTO-COMPLÉTION ---
 function FormLocationAutocomplete({ placeholder, value, onChange, dotColor, focusColor }: any) {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [history, setHistory] = useState<string[]>([]);
@@ -99,7 +99,6 @@ const JOURS_SEMAINE = [
 export default function PublierTrajet() {
   const router = useRouter();
   
-  // ÉTATS GLOBAUX
   const [typeTrajet, setTypeTrajet] = useState<"quotidien" | "evenement">("quotidien");
   const [isRecurring, setIsRecurring] = useState(false);
   const [joursReguliers, setJoursReguliers] = useState<string[]>([]);
@@ -126,7 +125,7 @@ export default function PublierTrajet() {
   const [success, setSuccess] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
 
-  // --- FONCTION DE RÉCUPÉRATION ISOLÉE POUR FORCER L'ACTUALISATION ---
+  // Fonction initiale pour charger la donnée
   const fetchUserData = async () => {
     setSoldeLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -138,7 +137,6 @@ export default function PublierTrajet() {
     
     setUser(session.user);
     
-    // On force la lecture directe dans Supabase (bypass cache)
     const { data: profileData } = await supabase
       .from('profiles')
       .select('vehicule_marque, vehicule_couleur, solde_wallet')
@@ -236,10 +234,10 @@ export default function PublierTrajet() {
                   <Link href="/recharge" className="inline-flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-red-600 transition shadow-lg shadow-red-500/20">
                     <Wallet size={16}/> Recharger
                   </Link>
-                  {/* LE NOUVEAU BOUTON D'ACTUALISATION FORCÉE */}
-                  <button onClick={fetchUserData} className="inline-flex items-center gap-2 bg-white text-red-600 px-5 py-3 rounded-xl font-black text-sm border-2 border-red-100 hover:bg-red-50 transition">
-                    <RefreshCw size={16} className={soldeLoading ? "animate-spin" : ""} />
-                    {soldeLoading ? "Vérification..." : "J'ai rechargé"}
+                  {/* CORRECTION : Le bouton force le rechargement dur de la page pour briser le cache */}
+                  <button type="button" onClick={() => window.location.reload()} className="inline-flex items-center gap-2 bg-white text-red-600 px-5 py-3 rounded-xl font-black text-sm border-2 border-red-100 hover:bg-red-50 transition">
+                    <RefreshCw size={16} />
+                    Actualiser mon solde
                   </button>
                 </div>
                 
