@@ -7,6 +7,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 
+const AMOUNTS = [500, 1000, 2000, 5000]; // AJOUTÉ ICI POUR CORRIGER L'ERREUR VERCEL
+
 // NOUVEAU : Ajout de la liste pour le modal
 const PROVIDERS = [
   { id: "wave", name: "Wave CI", logo: "/wave.png", color: "bg-blue-50 border-blue-200 text-blue-900", numero: "+225 01 01 59 41 53" },
