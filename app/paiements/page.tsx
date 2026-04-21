@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CreditCard, ArrowUpRight, ArrowDownLeft, Wallet, History, Search, Phone, CheckCircle2, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Wallet, History, ShieldCheck, X, Phone } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+
+// NOUVEAU : Ajout de la liste pour le modal
+const PROVIDERS = [
+  { id: "wave", name: "Wave CI", logo: "/wave.png", color: "bg-blue-50 border-blue-200 text-blue-900", numero: "+225 01 01 59 41 53" },
+  { id: "om", name: "Orange Money", logo: "/OM.png", color: "bg-orange-50 border-orange-200 text-orange-900", numero: "+225 07 89 77 07 03" },
+  { id: "mtn", name: "MTN MoMo", logo: "/MTN.jpeg", color: "bg-yellow-50 border-yellow-300 text-yellow-900", numero: "+225 05 08 60 90 98" },
+  { id: "moov", name: "Moov Money", logo: "/MOOV.png", color: "bg-blue-50 border-blue-300 text-blue-900", numero: "+225 01 01 59 41 53" }
+];
 
 export default function PaiementsPage() {
   const router = useRouter();
@@ -21,17 +29,17 @@ export default function PaiementsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/connexion'); return; }
 
-      // 1. Charger le vrai profil (pour le rôle et le solde wallet)
+      // 1. Charger le vrai profil
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
         .single();
-      
+        
       setUserProfile(profile);
 
-      // 2. Charger l'historique des transactions
-      const { data, error } = await supabase
+      // 2. Charger l'historique
+      const { data } = await supabase
         .from('paiements')
         .select('*')
         .eq('user_id', session.user.id)
@@ -186,34 +194,28 @@ export default function PaiementsPage() {
             </div>
             
             <h2 className="text-2xl font-black text-gray-900 mb-2">Recharger mon compte</h2>
-            <p className="text-gray-500 font-medium mb-6">
-              Pour créditer votre portefeuille, effectuez un dépôt sur l'un de nos numéros professionnels. Votre compte sera rechargé dans les 5 minutes.
+            <p className="text-gray-500 text-sm font-medium mb-6">
+              Pour créditer votre portefeuille, effectuez un dépôt sur l'un de ces numéros :
             </p>
             
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-center justify-between">
-                <div>
-                  <p className="font-black text-blue-800">Wave CI</p>
-                  <p className="font-bold text-blue-600 text-lg tracking-widest mt-1">07 00 00 00 00</p>
-                </div>
-                <img src="https://play-lh.googleusercontent.com/1O8H1R00g271R4F4zV3Eusv59TWeX2uU-uYI1kE0v78LgQYw2cM7Jvj5aL8P-l9-5w" alt="Wave" className="w-10 h-10 rounded-xl" />
-              </div>
-              
-              <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl flex items-center justify-between">
-                <div>
-                  <p className="font-black text-orange-800">Orange Money</p>
-                  <p className="font-bold text-orange-600 text-lg tracking-widest mt-1">07 00 00 00 00</p>
-                </div>
-                <img src="https://play-lh.googleusercontent.com/9nFk1sV-rQ5gAIf0_3rBw1N3F9yqJgQ3j-4fXJ7N4p04yR8yO06u_72gYQnF18A3gXo" alt="Orange Money" className="w-10 h-10 rounded-xl" />
-              </div>
+            {/* LISTE DES NUMÉROS DE PAIEMENT */}
+            <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
+              {PROVIDERS.map(p => (
+                 <div key={p.id} className={`border p-4 rounded-2xl flex items-center justify-between ${p.color}`}>
+                    <div>
+                      <p className="font-black opacity-80 text-sm">{p.name}</p>
+                      <p className="font-bold text-lg tracking-widest mt-1">{p.numero}</p>
+                    </div>
+                    <img src={p.logo} alt={p.name} className="w-10 h-10 rounded-xl object-contain bg-white p-1 shadow-sm" />
+                 </div>
+              ))}
             </div>
 
-            <div className="mt-8 bg-gray-50 p-4 rounded-2xl flex items-start gap-3 border border-gray-100">
-              <CheckCircle2 className="text-yamo-teal flex-shrink-0 mt-0.5" size={20} />
-              <p className="text-xs font-bold text-gray-500 leading-relaxed">
-                Après votre dépôt, contactez le support Yamoh via WhatsApp pour accélérer la validation.
-              </p>
-            </div>
+            <Link href="/recharge" className="w-full mt-6">
+              <button className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition shadow-xl">
+                Lancer la recharge
+              </button>
+            </Link>
           </div>
         </div>
       )}

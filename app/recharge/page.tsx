@@ -2,18 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Wallet, CheckCircle2, Loader2, ShieldCheck, History } from "lucide-react";
+import { ArrowLeft, Wallet, CheckCircle2, Loader2, ShieldCheck, Copy } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 
 const AMOUNTS = [500, 1000, 2000, 5000];
 
+// NOUVEAU : Ajout des numéros officiels
 const PROVIDERS = [
-  { id: "wave", name: "Wave", logo: "/wave.png", color: "bg-blue-50 border-blue-500" },
-  { id: "om", name: "Orange Money", logo: "/OM.png", color: "bg-orange-50 border-orange-500" },
-  { id: "mtn", name: "MTN Mobile Money", logo: "/MTN.jpeg", color: "bg-yellow-50 border-yellow-400" },
-  { id: "moov", name: "Moov Money", logo: "/MOOV.png", color: "bg-blue-50 border-blue-600" }
+  { id: "wave", name: "Wave", logo: "/wave.png", color: "bg-blue-50 border-blue-500", numero: "+225 01 01 59 41 53" },
+  { id: "om", name: "Orange Money", logo: "/OM.png", color: "bg-orange-50 border-orange-500", numero: "+225 07 89 77 07 03" },
+  { id: "mtn", name: "MTN Mobile Money", logo: "/MTN.jpeg", color: "bg-yellow-50 border-yellow-400", numero: "+225 05 08 60 90 98" },
+  { id: "moov", name: "Moov Money", logo: "/MOOV.png", color: "bg-blue-50 border-blue-600", numero: "+225 01 01 59 41 53" }
 ];
 
 export default function RechargePage() {
@@ -57,7 +58,6 @@ export default function RechargePage() {
     setAmount(parseInt(e.target.value) || 0);
   };
 
-  // --- SIMULATEUR DE PAIEMENT (EN ATTENDANT LUNDI) ---
   const handlePayment = async () => {
     if (amount < 100) {
       alert("Le montant minimum de recharge est de 100 FCFA.");
@@ -66,11 +66,10 @@ export default function RechargePage() {
 
     setProcessing(true);
 
-    // 1. Simulation du temps d'attente de l'API (Wave/OM...)
+    // Simulation du temps d'attente
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     try {
-      // 2. Mise à jour du solde dans la base de données
       const nouveauSolde = soldeActuel + amount;
       const { error: updateError } = await supabase
         .from('profiles')
@@ -79,19 +78,17 @@ export default function RechargePage() {
 
       if (updateError) throw updateError;
 
-      // 3. Historique de la transaction
       await supabase.from('paiements').insert([{
         user_id: user.id,
         montant: amount,
-        type: 'gain', // C'est une entrée d'argent sur le wallet
+        type: 'gain',
         methode: PROVIDERS.find(p => p.id === provider)?.name || 'Mobile Money',
         libelle: `Recharge Wallet via ${PROVIDERS.find(p => p.id === provider)?.name}`
       }]);
 
-      // 4. Succès et redirection
       setSuccess(true);
       setTimeout(() => {
-        router.push('/publier'); // Ramène direct à la publication !
+        router.push('/publier'); 
       }, 2500);
 
     } catch (error) {
@@ -116,6 +113,8 @@ export default function RechargePage() {
       </main>
     );
   }
+
+  const selectedProviderData = PROVIDERS.find(p => p.id === provider);
 
   return (
     <main className="min-h-screen bg-gray-50 font-sans pb-20">
@@ -173,7 +172,7 @@ export default function RechargePage() {
             Moyen de paiement <ShieldCheck size={18} className="text-green-500" />
           </h3>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 mb-8">
             {PROVIDERS.map((p) => (
               <button 
                 key={p.id}
@@ -192,13 +191,20 @@ export default function RechargePage() {
               </button>
             ))}
           </div>
+
+          {/* INSTRUCTIONS DE PAIEMENT (S'AFFICHE SELON LE CHOIX) */}
+          <div className="bg-[#E8F4F8] border border-yamo-teal/20 p-5 rounded-2xl flex flex-col items-center text-center">
+            <p className="text-gray-600 font-medium text-sm mb-2">Veuillez transférer {amount > 0 ? amount.toLocaleString() : 0} FCFA sur ce numéro :</p>
+            <p className="text-3xl font-black text-gray-900 tracking-wider mb-1">{selectedProviderData?.numero}</p>
+            <p className="text-yamo-teal font-bold text-sm uppercase">{selectedProviderData?.name}</p>
+          </div>
         </div>
 
         {/* BOUTON PAYER */}
         {processing ? (
           <div className="w-full bg-gray-100 text-gray-500 font-black text-xl py-6 rounded-[2rem] flex flex-col items-center justify-center gap-3">
             <Loader2 className="animate-spin text-yamo-teal" size={32} />
-            <span className="text-sm">Connexion à {PROVIDERS.find(p => p.id === provider)?.name}...</span>
+            <span className="text-sm">Vérification de la transaction...</span>
           </div>
         ) : (
           <button 
@@ -206,12 +212,12 @@ export default function RechargePage() {
             disabled={amount < 100}
             className="w-full bg-yamo-orange text-white font-black text-xl py-6 rounded-[2rem] shadow-xl shadow-yamo-orange/20 hover:bg-[#D55A1A] transition-all flex items-center justify-center gap-2 hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
           >
-            Payer {amount > 0 ? amount.toLocaleString() : 0} FCFA
+            J'ai effectué le dépôt
           </button>
         )}
         
         <p className="text-center text-xs text-gray-400 font-bold mt-6 flex items-center justify-center gap-1">
-          <ShieldCheck size={14} /> Paiement sécurisé et crypté
+          <ShieldCheck size={14} /> La validation prend entre 1 et 5 minutes.
         </p>
 
       </div>
