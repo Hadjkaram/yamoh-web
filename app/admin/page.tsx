@@ -303,20 +303,30 @@ export default function ERPAdmin() {
     const confirm = window.confirm(`Voulez-vous valider cette recharge de ${recharge.montant} FCFA pour ${recharge.profiles?.full_name} ? Avez-vous bien reçu l'argent sur ${recharge.methode} ?`);
     if (!confirm) return;
 
-    await supabase.from('paiements').update({ type: 'gain' }).eq('id', recharge.id);
-    
-    const nouveauSolde = (recharge.profiles?.solde_wallet || 0) + recharge.montant;
-    await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', recharge.user_id); // CORRECTION : 'id' et pas 'user_id' pour table profiles
-    
-    await supabase.from('notifications').insert([{
-      user_id: recharge.user_id, 
-      titre: "Recharge validée ! 💰", 
-      message: `Votre recharge de ${recharge.montant} FCFA via ${recharge.methode} a été validée. Vous pouvez publier !`, 
-      type: 'systeme'
-    }]);
+    try {
+      // 1. Valider le paiement (type = 'gain')
+      const { error: payError } = await supabase.from('paiements').update({ type: 'gain' }).eq('id', recharge.id);
+      if (payError) throw payError;
+      
+      // 2. Créditer le solde du profil
+      const nouveauSolde = (recharge.profiles?.solde_wallet || 0) + recharge.montant;
+      const { error: profError } = await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', recharge.user_id); // CORRECTION : 'id' et pas 'user_id' pour table profiles
+      if (profError) throw profError;
+      
+      // 3. Envoyer la notification
+      await supabase.from('notifications').insert([{
+        user_id: recharge.user_id, 
+        titre: "Recharge validée ! 💰", 
+        message: `Votre recharge de ${recharge.montant} FCFA via ${recharge.methode} a été validée. Vous pouvez publier !`, 
+        type: 'systeme'
+      }]);
 
-    alert("Recharge validée et compte crédité !");
-    fetchPendingRecharges();
+      alert("Recharge validée et compte crédité !");
+      fetchPendingRecharges();
+      fetchCompta(); // Rafraîchir les stats
+    } catch (e: any) {
+      alert("Erreur lors de la validation : " + e.message);
+    }
   };
 
   if (isAuthorized === null) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-yamo-teal font-black">VÉRIFICATION...</div>;
@@ -558,12 +568,12 @@ export default function ERPAdmin() {
              loadingUsers ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
              <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead>
+                 <thead>
                     <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
                       <th className="p-4 md:p-6">Utilisateur</th><th className="p-4 md:p-6">Rôle</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Statut KYC</th><th className="p-4 md:p-6 text-right">Actions</th>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
+                 </thead>
+                 <tbody className="divide-y divide-gray-50">
                     {filteredUsers.map(u => (
                       <tr key={u.id} className="hover:bg-gray-50/50 transition">
                         <td className="p-4 md:p-6 flex items-center gap-3 md:gap-4">
@@ -583,7 +593,7 @@ export default function ERPAdmin() {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
+                 </tbody>
                </table>
              </div>
           )}
@@ -611,32 +621,32 @@ export default function ERPAdmin() {
                </div>
 
                <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
-                  <div className="p-4 md:p-6 border-b border-gray-100 flex items-center gap-4 bg-orange-50/50">
-                    <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><AlertTriangle size={24}/></div>
-                    <div>
-                      <h3 className="text-lg md:text-xl font-black text-gray-900">Recharge d'urgence / Espèces</h3>
-                      <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur.</p>
-                    </div>
-                  </div>
-                  <table className="w-full text-left border-collapse min-w-[500px]">
-                    <thead><tr className="bg-gray-50 border-b border-gray-100 text-[10px] md:text-xs uppercase tracking-wider text-gray-500 font-black"><th className="p-4 md:p-6">Chauffeur</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Solde Wallet</th><th className="p-4 md:p-6 text-right">Action d'Urgence</th></tr></thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {filteredChauffeurs.map(c => (
-                        <tr key={c.id} className="hover:bg-gray-50/50 transition">
-                          <td className="p-4 md:p-6 flex items-center gap-3 md:gap-4">
-                            <div className="w-8 h-8 md:w-10 md:h-10 bg-gray-100 font-black rounded-full flex items-center justify-center text-gray-700 flex-shrink-0">{c.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
-                            <p className="font-bold text-sm md:text-base truncate max-w-[120px]">{c.full_name || 'Utilisateur'}</p>
-                          </td>
-                          <td className="p-4 md:p-6 font-medium text-xs md:text-sm text-gray-600">{c.phone || 'N/A'}</td>
-                          <td className="p-4 md:p-6"><span className={`font-black text-sm md:text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>{c.solde_wallet || 0} F</span></td>
-                          <td className="p-4 md:p-6 text-right">
-                            <button onClick={() => handleRechargerWallet(c)} className="bg-orange-100 text-orange-600 hover:bg-orange-500 hover:text-white font-bold px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 md:gap-2 ml-auto shadow-sm">
-                              <PlusCircle size={16}/> <span className="hidden sm:inline">Forcer Recharge</span>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
+                 <div className="p-4 md:p-6 border-b border-gray-100 flex items-center gap-4 bg-orange-50/50">
+                   <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><AlertTriangle size={24}/></div>
+                   <div>
+                     <h3 className="text-lg md:text-xl font-black text-gray-900">Recharge d'urgence / Espèces</h3>
+                     <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur.</p>
+                   </div>
+                 </div>
+                 <table className="w-full text-left border-collapse min-w-[500px]">
+                   <thead><tr className="bg-gray-50 border-b border-gray-100 text-[10px] md:text-xs uppercase tracking-wider text-gray-500 font-black"><th className="p-4 md:p-6">Chauffeur</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Solde Wallet</th><th className="p-4 md:p-6 text-right">Action d'Urgence</th></tr></thead>
+                   <tbody className="divide-y divide-gray-50">
+                     {filteredChauffeurs.map(c => (
+                       <tr key={c.id} className="hover:bg-gray-50/50 transition">
+                         <td className="p-4 md:p-6 flex items-center gap-3 md:gap-4">
+                           <div className="w-8 h-8 md:w-10 md:h-10 bg-gray-100 font-black rounded-full flex items-center justify-center text-gray-700 flex-shrink-0">{c.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                           <p className="font-bold text-sm md:text-base truncate max-w-[120px]">{c.full_name || 'Utilisateur'}</p>
+                         </td>
+                         <td className="p-4 md:p-6 font-medium text-xs md:text-sm text-gray-600">{c.phone || 'N/A'}</td>
+                         <td className="p-4 md:p-6"><span className={`font-black text-sm md:text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>{c.solde_wallet || 0} F</span></td>
+                         <td className="p-4 md:p-6 text-right">
+                           <button onClick={() => handleRechargerWallet(c)} className="bg-orange-100 text-orange-600 hover:bg-orange-500 hover:text-white font-bold px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 md:gap-2 ml-auto shadow-sm">
+                             <PlusCircle size={16}/> <span className="hidden sm:inline">Forcer Recharge</span>
+                           </button>
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
                  </table>
                </div>
              </div>

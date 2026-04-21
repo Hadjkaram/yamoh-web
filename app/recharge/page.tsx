@@ -70,29 +70,23 @@ export default function RechargePage() {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     try {
-      const nouveauSolde = soldeActuel + amount;
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ solde_wallet: nouveauSolde })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
+      // ON A SUPPRIMÉ L'UPDATE DIRECT DU SOLDE ICI POUR SÉCURISER
 
       await supabase.from('paiements').insert([{
         user_id: user.id,
         montant: amount,
-        type: 'gain',
+        type: 'recharge_attente', // Statut pour que l'ERP le détecte
         methode: PROVIDERS.find(p => p.id === provider)?.name || 'Mobile Money',
-        libelle: `Recharge Wallet via ${PROVIDERS.find(p => p.id === provider)?.name}`
+        libelle: `Demande de recharge via ${PROVIDERS.find(p => p.id === provider)?.name}`
       }]);
 
       setSuccess(true);
       setTimeout(() => {
         router.push('/publier'); 
-      }, 2500);
+      }, 3500);
 
     } catch (error) {
-      alert("Erreur lors de la recharge. Veuillez réessayer.");
+      alert("Erreur lors de l'envoi de la demande. Veuillez réessayer.");
       setProcessing(false);
     }
   };
@@ -102,13 +96,16 @@ export default function RechargePage() {
   if (success) {
     return (
       <main className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300">
-        <div className="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-6">
+        <div className="w-24 h-24 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center mb-6">
           <CheckCircle2 size={50} />
         </div>
-        <h1 className="text-3xl font-black text-gray-900 mb-2">Recharge réussie !</h1>
-        <p className="text-gray-500 text-lg mb-8">Votre solde a été mis à jour de +{amount.toLocaleString()} FCFA.</p>
+        <h1 className="text-3xl font-black text-gray-900 mb-2">Demande envoyée !</h1>
+        <p className="text-gray-500 text-lg mb-8">
+          Votre demande de recharge de <strong>{amount.toLocaleString()} FCFA</strong> a été transmise.<br/>
+          Votre compte sera crédité dès validation du dépôt par l'administrateur.
+        </p>
         <div className="flex items-center gap-2 text-yamo-teal font-bold animate-pulse">
-          <Loader2 className="animate-spin" size={20} /> Retour au formulaire...
+          <Loader2 className="animate-spin" size={20} /> Redirection...
         </div>
       </main>
     );
@@ -204,7 +201,7 @@ export default function RechargePage() {
         {processing ? (
           <div className="w-full bg-gray-100 text-gray-500 font-black text-xl py-6 rounded-[2rem] flex flex-col items-center justify-center gap-3">
             <Loader2 className="animate-spin text-yamo-teal" size={32} />
-            <span className="text-sm">Vérification de la transaction...</span>
+            <span className="text-sm">Envoi de la demande...</span>
           </div>
         ) : (
           <button 
@@ -217,7 +214,7 @@ export default function RechargePage() {
         )}
         
         <p className="text-center text-xs text-gray-400 font-bold mt-6 flex items-center justify-center gap-1">
-          <ShieldCheck size={14} /> La validation prend entre 1 et 5 minutes.
+          <ShieldCheck size={14} /> La validation par l'administrateur prend entre 1 et 5 minutes.
         </p>
 
       </div>

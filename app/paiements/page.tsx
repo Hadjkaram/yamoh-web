@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Wallet, History, ShieldCheck, X, Phone } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Wallet, History, ShieldCheck, X, Phone, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 
 // NOUVEAU : Ajout de la liste pour le modal
@@ -23,6 +24,11 @@ export default function PaiementsPage() {
   
   // Modal de recharge
   const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [amount, setAmount] = useState<number>(1000);
+  const [customAmount, setCustomAmount] = useState<string>("");
+  const [provider, setProvider] = useState<string>("wave");
+  const [processing, setProcessing] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -59,10 +65,62 @@ export default function PaiementsPage() {
     return true;
   });
 
+  const handleAmountClick = (val: number) => {
+    setAmount(val);
+    setCustomAmount("");
+  };
+
+  const handleCustomAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomAmount(e.target.value);
+    setAmount(parseInt(e.target.value) || 0);
+  };
+
+  // --- MISE A JOUR : LOGIQUE SECURISEE (DEMANDE EN ATTENTE) ---
+  const handlePayment = async () => {
+    if (amount < 100) {
+      alert("Le montant minimum de recharge est de 100 FCFA.");
+      return;
+    }
+
+    setProcessing(true);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    try {
+      const selectedProviderData = PROVIDERS.find(p => p.id === provider);
+
+      // Envoi de la demande uniquement (pas de modification de solde)
+      const { error: insertError } = await supabase.from('paiements').insert([{
+        user_id: userProfile.id,
+        montant: amount,
+        type: 'recharge_attente',
+        methode: selectedProviderData?.name || 'Mobile Money',
+        libelle: `Demande de recharge via ${selectedProviderData?.name}`
+      }]);
+
+      if (insertError) throw insertError;
+
+      setRequestSent(true);
+      
+      // Fermeture du modal et rafraichissement après succès
+      setTimeout(() => {
+        setShowRechargeModal(false);
+        setRequestSent(false);
+        setProcessing(false);
+        window.location.reload(); 
+      }, 3000);
+
+    } catch (error) {
+      alert("Erreur lors de l'envoi de la demande. Veuillez réessayer.");
+      setProcessing(false);
+    }
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-yamo-teal">Chargement de vos finances...</div>;
 
   const isChauffeur = userProfile?.role === 'chauffeur';
   const soldeActuel = userProfile?.solde_wallet || 0;
+
+  const selectedProviderData = PROVIDERS.find(p => p.id === provider);
 
   return (
     <main className="min-h-screen bg-gray-50 font-sans pb-12 relative">
@@ -147,6 +205,7 @@ export default function PaiementsPage() {
             <div className="flex flex-col divide-y divide-gray-50">
               {filteredPaiements.map((p) => {
                 const isGain = p.type === 'gain';
+                const isAttente = p.type === 'recharge_attente';
                 const isCommission = p.libelle.toLowerCase().includes('commission');
                 
                 return (
@@ -154,10 +213,11 @@ export default function PaiementsPage() {
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center flex-shrink-0 ${
                         isGain ? 'bg-green-50 text-green-500' : 
+                        isAttente ? 'bg-orange-50 text-orange-500' :
                         isCommission ? 'bg-orange-50 text-orange-500' : 
                         'bg-gray-100 text-gray-500'
                       }`}>
-                        {isGain ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
+                        {isGain ? <ArrowDownLeft size={24} /> : isAttente ? <Clock size={24} /> : <ArrowUpRight size={24} />}
                       </div>
                       <div>
                         <p className="font-black text-gray-900 text-lg leading-tight mb-1">{p.libelle}</p>
@@ -168,10 +228,10 @@ export default function PaiementsPage() {
                     </div>
                     
                     <div className="text-right">
-                      <p className={`text-xl font-black ${isGain ? 'text-green-500' : isCommission ? 'text-orange-500' : 'text-gray-900'}`}>
+                      <p className={`text-xl font-black ${isGain ? 'text-green-500' : isAttente || isCommission ? 'text-orange-500' : 'text-gray-900'}`}>
                         {isGain ? '+' : '-'}{p.montant} <span className="text-sm">FCFA</span>
                       </p>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mt-1">{p.methode}</p>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mt-1">{isAttente ? 'En attente' : p.methode}</p>
                     </div>
                   </div>
                 )
@@ -183,39 +243,66 @@ export default function PaiementsPage() {
 
       {/* --- MODAL DE RECHARGE (INSTRUCTIONS) --- */}
       {showRechargeModal && (
-        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col w-full max-w-sm relative animate-in zoom-in duration-200">
-            <button onClick={() => setShowRechargeModal(false)} className="absolute top-6 right-6 p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200 transition">
-              <X size={20} />
-            </button>
-            
-            <div className="w-16 h-16 bg-yamo-teal/10 text-yamo-teal rounded-full flex items-center justify-center mb-6">
-              <Phone size={32} />
-            </div>
-            
-            <h2 className="text-2xl font-black text-gray-900 mb-2">Recharger mon compte</h2>
-            <p className="text-gray-500 text-sm font-medium mb-6">
-              Pour créditer votre portefeuille, effectuez un dépôt sur l'un de ces numéros :
-            </p>
-            
-            {/* LISTE DES NUMÉROS DE PAIEMENT */}
-            <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
-              {PROVIDERS.map(p => (
-                 <div key={p.id} className={`border p-4 rounded-2xl flex items-center justify-between ${p.color}`}>
-                    <div>
-                      <p className="font-black opacity-80 text-sm">{p.name}</p>
-                      <p className="font-bold text-lg tracking-widest mt-1">{p.numero}</p>
-                    </div>
-                    <img src={p.logo} alt={p.name} className="w-10 h-10 rounded-xl object-contain bg-white p-1 shadow-sm" />
-                 </div>
-              ))}
-            </div>
+            {requestSent ? (
+              <div className="text-center py-10 animate-in fade-in">
+                <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} /></div>
+                <h2 className="text-2xl font-black text-gray-900 mb-2">Demande envoyée !</h2>
+                <p className="text-gray-500 font-medium">Votre demande est transmise. Le solde sera crédité dès validation par l'administrateur.</p>
+              </div>
+            ) : (
+              <>
+                <button onClick={() => setShowRechargeModal(false)} className="absolute top-6 right-6 p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200 transition">
+                  <X size={20} />
+                </button>
+                
+                <h2 className="text-2xl font-black text-gray-900 mb-6 mt-2">Recharger</h2>
+                
+                <div className="space-y-4 mb-6">
+                  <select className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-yamo-teal" value={provider} onChange={(e) => setProvider(e.target.value)}>
+                    {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {AMOUNTS.map((val) => (
+                      <button 
+                        key={val} 
+                        onClick={() => handleAmountClick(val)}
+                        className={`py-3 rounded-2xl font-black text-sm transition-all border-2 ${amount === val && customAmount === "" ? 'bg-yamo-teal border-yamo-teal text-white shadow-md' : 'bg-gray-50 border-transparent text-gray-600 hover:bg-gray-100'}`}
+                      >
+                        {val.toLocaleString()} F
+                      </button>
+                    ))}
+                  </div>
 
-            <Link href="/recharge" className="w-full mt-6">
-              <button className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition shadow-xl">
-                Lancer la recharge
-              </button>
-            </Link>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Autre :</span>
+                    <input 
+                      type="number" 
+                      placeholder="Montant" 
+                      value={customAmount}
+                      onChange={handleCustomAmountChange}
+                      className="w-full bg-gray-50 border-2 border-gray-100 py-3 pl-20 pr-4 rounded-2xl outline-none focus:border-yamo-teal font-black text-lg transition-colors"
+                    />
+                  </div>
+                </div>
+                
+                <div className="bg-[#E8F4F8] border border-yamo-teal/20 p-4 rounded-2xl flex flex-col items-center text-center mb-6">
+                  <p className="text-gray-600 font-medium text-sm mb-1">Veuillez transférer {amount > 0 ? amount.toLocaleString() : 0} FCFA au :</p>
+                  <p className="text-2xl font-black text-gray-900 tracking-wider mb-1">{selectedProviderData?.numero}</p>
+                  <p className="text-yamo-teal font-bold text-xs uppercase">{selectedProviderData?.name}</p>
+                </div>
+
+                <button 
+                  onClick={handlePayment}
+                  disabled={processing || amount < 100}
+                  className="w-full bg-yamo-orange text-white font-black py-4 rounded-xl hover:bg-[#D55A1A] transition shadow-lg shadow-yamo-orange/20 flex items-center justify-center disabled:opacity-50"
+                >
+                  {processing ? <Loader2 className="animate-spin" /> : "J'ai effectué le dépôt"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
