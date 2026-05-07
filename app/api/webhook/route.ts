@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Le passe-partout Admin pour contourner la sécurité RLS de Supabase
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
@@ -9,23 +8,23 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const status = body.status; 
+    const bodyText = await req.text();
+    const body = JSON.parse(bodyText);
     
-    // Si le paiement échoue, on ignore
-    if (status !== 'SUCCESS' && status !== 'PAID' && status !== 'COMPLETED') {
-      return NextResponse.json({ message: 'Paiement non finalisé' }, { status: 400 });
+    // Vérification de l'événement selon la doc GeniusPay
+    if (body.event !== 'payment.success') {
+      return NextResponse.json({ message: 'Ignoré (pas un succès)' });
     }
 
-    // On récupère l'ID du passager qu'on avait glissé à l'étape 1
-    const userId = body.metadata?.userId;
-    const amountPaid = Number(body.amount);
+    // Récupération des données selon la structure de la doc
+    const userId = body.data?.metadata?.user_id;
+    const amountPaid = Number(body.data?.amount);
 
     if (!userId || !amountPaid) {
       return NextResponse.json({ error: 'Données utilisateur manquantes' }, { status: 400 });
     }
 
-    // On vérifie combien il a déjà dans son portefeuille
+    // Vérification du solde actuel
     const { data: profile, error: fetchError } = await supabaseAdmin
       .from('profiles')
       .select('solde_wallet')
@@ -34,10 +33,10 @@ export async function POST(req: Request) {
 
     if (fetchError) throw fetchError;
 
-    // On ajoute le nouveau montant
+    // Ajout du montant
     const nouveauSolde = (profile?.solde_wallet || 0) + amountPaid;
 
-    // On sauvegarde la nouvelle somme
+    // Sauvegarde du nouveau solde
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({ solde_wallet: nouveauSolde })

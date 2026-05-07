@@ -5,35 +5,39 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { amount, provider, phone, userId } = body;
 
-    // Appel à l'API de GeniusPay pour créer la transaction
-    const geniusPayResponse = await fetch('https://api.geniuspay.com/v1/payments', { 
+    // L'URL exacte tirée de la documentation GeniusPay
+    const geniusPayResponse = await fetch('https://pay.genius.ci/api/v1/merchant/payments', { 
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.GENIUSPAY_SECRET_KEY}`,
+        // GeniusPay exige ces deux headers spécifiques
+        'X-API-Key': process.env.GENIUSPAY_API_KEY!,
+        'X-API-Secret': process.env.GENIUSPAY_API_SECRET!,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         amount: amount,
         currency: 'XOF',
-        payment_method: provider,
-        customer_phone: phone,
-        // On glisse l'ID du passager ici, GeniusPay nous le rendra plus tard
-        metadata: {
-          userId: userId
+        payment_method: provider, // ex: 'wave', 'orange_money'
+        customer: {
+          phone: phone // Doit inclure l'indicatif (ex: +225...)
         },
-        // L'URL de notre Caissier qui validera l'argent
-        callback_url: 'https://yamoh.net/api/webhook' 
+        metadata: {
+          user_id: userId // Pour que le webhook sache à qui donner l'argent
+        }
       })
     });
 
-    const data = await geniusPayResponse.json();
+    const json = await geniusPayResponse.json();
 
-    if (!geniusPayResponse.ok) {
-        return NextResponse.json({ error: data.message || "Erreur GeniusPay" }, { status: 400 });
+    // Gestion des erreurs selon la documentation GeniusPay
+    if (!json.success) {
+        return NextResponse.json({ error: json.error?.message || "Erreur GeniusPay" }, { status: 400 });
     }
 
-    // On renvoie le lien de paiement à Flutter
-    return NextResponse.json({ url: data.payment_url });
+    // GeniusPay renvoie payment_url (si provider spécifié) ou checkout_url
+    const paymentUrl = json.data.payment_url || json.data.checkout_url;
+
+    return NextResponse.json({ url: paymentUrl });
 
   } catch (error) {
     console.error("Erreur Init Paiement:", error);
