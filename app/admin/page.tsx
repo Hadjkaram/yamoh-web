@@ -8,7 +8,7 @@ import {
   CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
   Clock, CheckCircle2, Ban, Lock, User as UserIcon,
   Activity, TrendingUp, MapPin, Navigation, Car, PlusCircle, Trash2,
-  Menu, X, Receipt, Phone, AlertOctagon, Crosshair, History
+  Menu, X, Receipt, Phone, AlertOctagon, Crosshair, History, Download, BarChart3
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -23,7 +23,6 @@ export default function ERPAdmin() {
   const [adminPassword, setAdminPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   
-  // NOUVEAU : RADAR À ERREURS
   const [dbError, setDbError] = useState<string | null>(null);
 
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
@@ -42,12 +41,12 @@ export default function ERPAdmin() {
   const [chauffeurs, setChauffeurs] = useState<any[]>([]);
   const [loadingCompta, setLoadingCompta] = useState(true);
 
-  const [pendingRecharges, setPendingRecharges] = useState<any[]>([]);
-  const [loadingRecharges, setLoadingRecharges] = useState(true);
+  // NOUVEAU : Remplacement des recharges en attente par l'historique complet
+  const [transactionsHistory, setTransactionsHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
 
   const [alertes, setAlertes] = useState<any[]>([]);
 
-  // --- NOUVEAUX ÉTATS POUR L'INSPECTION DÉTAILLÉE ---
   const [inspectUser, setInspectUser] = useState<any>(null);
   const [inspectUserHistory, setInspectUserHistory] = useState<any[]>([]);
 
@@ -80,15 +79,50 @@ export default function ERPAdmin() {
 
   useEffect(() => {
     if (isAuthorized) {
-      setDbError(null); // On réinitialise l'erreur à chaque changement de menu
+      setDbError(null);
       if (activeMenu === "kyc") fetchPendingKYC();
       if (activeMenu === "users") fetchAllUsers();
       if (activeMenu === "live") fetchLiveTrips();
       if (activeMenu === "compta" || activeMenu === "dashboard") fetchCompta();
-      if (activeMenu === "recharges") fetchPendingRecharges();
+      if (activeMenu === "history") fetchTransactionsHistory();
       if (activeMenu === "alertes") fetchAlertes();
     }
   }, [activeMenu, isAuthorized]);
+
+  // --- NOUVEAU : FONCTION D'EXPORTATION CSV ---
+  const exportToCSV = (data: any[], filename: string) => {
+    if (!data || data.length === 0) {
+      alert("Aucune donnée à exporter.");
+      return;
+    }
+    
+    // Extraction des en-têtes
+    const headers = Object.keys(data[0]);
+    const csvRows = [];
+    
+    // Ajout de la ligne d'en-tête
+    csvRows.push(headers.join(','));
+    
+    // Ajout des données
+    for (const row of data) {
+      const values = headers.map(header => {
+        const val = row[header];
+        // Échapper les guillemets et gérer les objets imbriqués
+        const escaped = ('' + (typeof val === 'object' ? JSON.stringify(val) : val)).replace(/"/g, '""');
+        return `"${escaped}"`;
+      });
+      csvRows.push(values.join(','));
+    }
+    
+    // Téléchargement
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   const fetchAlertes = async () => {
     setAlertes([
@@ -99,16 +133,8 @@ export default function ERPAdmin() {
   const fetchPendingKYC = async () => {
     setLoadingKyc(true);
     const { data, error } = await supabase.from('profiles').select('*').eq('verification_status', 'en_attente');
-    
-    if (error) {
-      console.error("Erreur KYC:", error);
-      setDbError(`Erreur KYC : ${error.message}`);
-    }
-    
-    if (data) {
-      const sortedData = data.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setPendingUsers(sortedData);
-    }
+    if (error) setDbError(`Erreur KYC : ${error.message}`);
+    if (data) setPendingUsers(data.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
     setLoadingKyc(false);
   };
 
@@ -135,7 +161,6 @@ export default function ERPAdmin() {
     loadUserDocuments(user.id);
   };
 
-  // --- NOUVEAU : FONCTION D'INSPECTION DÉTAILLÉE ---
   const openInspectUser = async (user: any) => {
     setInspectUser(user);
     setLoadingDocs(true);
@@ -162,16 +187,8 @@ export default function ERPAdmin() {
   const fetchAllUsers = async () => {
     setLoadingUsers(true);
     const { data, error } = await supabase.from('profiles').select('*');
-    
-    if (error) {
-      console.error("Erreur Users:", error);
-      setDbError(`Erreur Utilisateurs : ${error.message}`);
-    }
-
-    if (data) {
-      const sortedData = data.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setAllUsers(sortedData);
-    }
+    if (error) setDbError(`Erreur Utilisateurs : ${error.message}`);
+    if (data) setAllUsers(data.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
     setLoadingUsers(false);
   };
 
@@ -187,31 +204,19 @@ export default function ERPAdmin() {
     setLoadingLive(true);
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase.from('trajets').select('*, reservations(*)').gte('date_depart', today);
-    
-    if (error) {
-      console.error("Erreur Trips:", error);
-      setDbError(`Erreur Trajets : ${error.message}`);
-    }
-
-    if (data) {
-      const sortedData = data.sort((a, b) => new Date(a.date_depart || 0).getTime() - new Date(b.date_depart || 0).getTime());
-      setLiveTrips(sortedData);
-    }
+    if (error) setDbError(`Erreur Trajets : ${error.message}`);
+    if (data) setLiveTrips(data.sort((a, b) => new Date(a.date_depart || 0).getTime() - new Date(b.date_depart || 0).getTime()));
     setLoadingLive(false);
   };
 
   const openGPS = (lat?: number, lng?: number) => {
-    if (lat && lng) {
-      window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
-    } else {
-      window.open(`https://www.google.com/maps`, '_blank');
-    }
+    if (lat && lng) window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+    else window.open(`https://www.google.com/maps`, '_blank');
   };
 
   const fetchCompta = async () => {
     setLoadingCompta(true);
     const { data: resas, error: resaError } = await supabase.from('reservations').select('places_reservees, statut, trajets(prix)').eq('statut', 'valide');
-    
     if (resaError) setDbError(`Erreur Compta Resa: ${resaError.message}`);
 
     let volumeGlobal = 0; let totalBillets = 0;
@@ -225,7 +230,6 @@ export default function ERPAdmin() {
     const commissionYamoh = volumeGlobal * 0.10;
     
     const { data: drivers, error: driversError } = await supabase.from('profiles').select('*').eq('role', 'chauffeur');
-    
     if (driversError) setDbError(`Erreur Compta Chauffeurs: ${driversError.message}`);
 
     let totalWallets = 0;
@@ -240,93 +244,75 @@ export default function ERPAdmin() {
   };
 
   const handleRechargerWallet = async (chauffeur: any) => {
-    const montantStr = window.prompt(`Entrez le montant à recharger pour ${chauffeur.full_name} (en FCFA) :`);
+    const montantStr = window.prompt(`Entrez le montant en ESPÈCES reçu de ${chauffeur.full_name} (en FCFA) :`);
     if (!montantStr) return;
     const montant = parseInt(montantStr, 10);
     if (isNaN(montant) || montant <= 0) { alert("Montant invalide."); return; }
 
     const nouveauSolde = (chauffeur.solde_wallet || 0) + montant;
+    
+    // 1. Mise à jour du solde
     const { error } = await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', chauffeur.id);
     
     if (error) {
       alert("Erreur lors de la recharge : " + error.message);
     } else {
-      await supabase.from('notifications').insert([{
-        user_id: chauffeur.id, titre: "Recharge effectuée 💰", message: `Votre portefeuille Yamoh a été crédité de ${montant} FCFA. Nouveau solde : ${nouveauSolde} FCFA.`, type: 'systeme'
+      // 2. Traçabilité dans la table paiements
+      await supabase.from('paiements').insert([{
+        user_id: chauffeur.id,
+        montant: montant,
+        type: 'gain',
+        methode: 'Espèces / Manuel',
+        libelle: 'Recharge en agence',
+        status: 'completed'
       }]);
-      alert(`Recharge de ${montant} FCFA effectuée avec succès !`);
+
+      await supabase.from('notifications').insert([{
+        user_id: chauffeur.id, titre: "Recharge Espèces 💰", message: `Votre portefeuille Yamoh a été crédité manuellement de ${montant} FCFA. Nouveau solde : ${nouveauSolde} FCFA.`, type: 'systeme'
+      }]);
+      alert(`Recharge de ${montant} FCFA effectuée et tracée avec succès !`);
       fetchCompta(); 
     }
   };
 
-  // --- CORRECTION : JOINTURE MANUELLE ---
-  const fetchPendingRecharges = async () => {
-    setLoadingRecharges(true);
+  // --- CORRECTION : FETCH DE L'HISTORIQUE AVEC JOINTURE MANUELLE ---
+  const fetchTransactionsHistory = async () => {
+    setLoadingHistory(true);
     
-    // 1. Fetch des paiements sans la jointure relationnelle (qui cause l'erreur)
-    const { data: rechargesData, error: rechError } = await supabase
+    // 1. On récupère les paiements SANS la jointure Supabase qui cause l'erreur
+    const { data: historyData, error: payError } = await supabase
       .from('paiements')
       .select('*')
-      .eq('type', 'recharge_attente');
+      .order('created_at', { ascending: false })
+      .limit(100); // Les 100 dernières pour les performances
       
-    if (rechError) {
-      setDbError(`Erreur Recharges : ${rechError.message}`);
-      setLoadingRecharges(false);
+    if (payError) {
+      setDbError(`Erreur Historique : ${payError.message}`);
+      setLoadingHistory(false);
       return;
     }
 
-    if (rechargesData && rechargesData.length > 0) {
-      // 2. Fetch des profils séparément
+    if (historyData && historyData.length > 0) {
+      // 2. On récupère les profils séparément
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, full_name, phone, solde_wallet');
+        .select('id, full_name, phone');
 
-      // 3. Fusion (Simulation de la jointure)
-      const combined = rechargesData.map(rech => {
-        const profile = profilesData?.find(p => p.id === rech.user_id);
+      // 3. On fusionne les deux (Jointure manuelle)
+      const combined = historyData.map(transaction => {
+        const profile = profilesData?.find(p => p.id === transaction.user_id);
         return {
-          ...rech,
-          profiles: profile || {}
+          ...transaction,
+          profiles: profile || {} // On attache le profil trouvé
         };
       });
 
-      const sortedData = combined.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setPendingRecharges(sortedData);
+      setTransactionsHistory(combined);
     } else {
-      setPendingRecharges([]);
+      setTransactionsHistory([]);
     }
     
-    setLoadingRecharges(false);
-  };
-
-  const handleValiderRecharge = async (recharge: any) => {
-    const confirm = window.confirm(`Voulez-vous valider cette recharge de ${recharge.montant} FCFA pour ${recharge.profiles?.full_name} ? Avez-vous bien reçu l'argent sur ${recharge.methode} ?`);
-    if (!confirm) return;
-
-    try {
-      // 1. Valider le paiement (type = 'gain')
-      const { error: payError } = await supabase.from('paiements').update({ type: 'gain' }).eq('id', recharge.id);
-      if (payError) throw payError;
-      
-      // 2. Créditer le solde du profil
-      const nouveauSolde = (recharge.profiles?.solde_wallet || 0) + recharge.montant;
-      const { error: profError } = await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', recharge.user_id); // CORRECTION : 'id' et pas 'user_id' pour table profiles
-      if (profError) throw profError;
-      
-      // 3. Envoyer la notification
-      await supabase.from('notifications').insert([{
-        user_id: recharge.user_id, 
-        titre: "Recharge validée ! 💰", 
-        message: `Votre recharge de ${recharge.montant} FCFA via ${recharge.methode} a été validée. Vous pouvez publier !`, 
-        type: 'systeme'
-      }]);
-
-      alert("Recharge validée et compte crédité !");
-      fetchPendingRecharges();
-      fetchCompta(); // Rafraîchir les stats
-    } catch (e: any) {
-      alert("Erreur lors de la validation : " + e.message);
-    }
+    setLoadingHistory(false);
   };
 
   if (isAuthorized === null) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-yamo-teal font-black">VÉRIFICATION...</div>;
@@ -384,11 +370,11 @@ export default function ERPAdmin() {
   const menuTitles: any = {
     live: { title: "Tour de Contrôle GPS", desc: "Suivi en temps réel des véhicules sur la route." },
     alertes: { title: "Urgences & SOS", desc: "Signalements des passagers et incidents." },
-    recharges: { title: "Dépôts Mobile Money", desc: "Validez les transferts des chauffeurs." },
+    history: { title: "Historique Transactions", desc: "Suivi automatisé GeniusPay et dépôts en espèces." },
     kyc: { title: "Vérifications KYC", desc: "Validez les permis et cartes d'identité." },
     users: { title: "Base Utilisateurs", desc: "Gérez tous les membres inscrits sur Yamoh." },
-    compta: { title: "Comptabilité globale", desc: "Recharges de secours et revenus." },
-    dashboard: { title: "Vue d'ensemble", desc: "Statistiques globales de Yamoh." }
+    compta: { title: "Comptabilité & Secours", desc: "Recharges en espèces manuelles." },
+    dashboard: { title: "Statistiques & Graphiques", desc: "Performances globales de l'application." }
   };
 
   const SidebarContent = () => (
@@ -405,11 +391,13 @@ export default function ERPAdmin() {
         
         <div className="my-4 border-t border-gray-800"></div>
 
-        <MenuBtn icon={<Receipt size={20}/>} label="Dépôts en attente" badge={pendingRecharges.length > 0 ? pendingRecharges.length : undefined} active={activeMenu === "recharges"} onClick={() => {setActiveMenu("recharges"); setIsMobileMenuOpen(false);}} />
+        {/* NOUVEAU MENU HISTORIQUE AU LIEU DE RECHARGES EN ATTENTE */}
+        <MenuBtn icon={<History size={20}/>} label="Transactions API" active={activeMenu === "history"} onClick={() => {setActiveMenu("history"); setIsMobileMenuOpen(false);}} />
+        
         <MenuBtn icon={<ShieldCheck size={20}/>} label="Vérifications (KYC)" badge={pendingUsers.length > 0 ? pendingUsers.length : undefined} active={activeMenu === "kyc"} onClick={() => {setActiveMenu("kyc"); setIsMobileMenuOpen(false);}} />
         <MenuBtn icon={<Users size={20}/>} label="Utilisateurs" active={activeMenu === "users"} onClick={() => {setActiveMenu("users"); setIsMobileMenuOpen(false);}} />
-        <MenuBtn icon={<Wallet size={20}/>} label="Comptabilité" active={activeMenu === "compta"} onClick={() => {setActiveMenu("compta"); setIsMobileMenuOpen(false);}} />
-        <MenuBtn icon={<LayoutDashboard size={20}/>} label="Statistiques" active={activeMenu === "dashboard"} onClick={() => {setActiveMenu("dashboard"); setIsMobileMenuOpen(false);}} />
+        <MenuBtn icon={<Wallet size={20}/>} label="Dépôts Espèces" active={activeMenu === "compta"} onClick={() => {setActiveMenu("compta"); setIsMobileMenuOpen(false);}} />
+        <MenuBtn icon={<BarChart3 size={20}/>} label="Statistiques" active={activeMenu === "dashboard"} onClick={() => {setActiveMenu("dashboard"); setIsMobileMenuOpen(false);}} />
       </nav>
       <div className="p-4 border-t border-gray-800">
         <button onClick={async () => { await supabase.auth.signOut(); setIsAuthorized(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl transition">
@@ -439,9 +427,12 @@ export default function ERPAdmin() {
               <p className="text-gray-500 font-medium text-xs md:text-sm mt-1">{menuTitles[activeMenu]?.desc}</p>
             </div>
           </div>
-          <div className="relative w-full md:w-auto">
-            <Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
-            <input type="text" placeholder="Rechercher..." value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} className="pl-12 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-yamo-teal w-full md:w-72 transition-all focus:w-full md:focus:w-96 font-bold" />
+          
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full md:w-auto">
+              <Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
+              <input type="text" placeholder="Rechercher..." value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} className="pl-12 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-yamo-teal w-full md:w-72 transition-all focus:w-full md:focus:w-96 font-bold" />
+            </div>
           </div>
         </header>
 
@@ -470,8 +461,6 @@ export default function ERPAdmin() {
                    const resas = trip.reservations || [];
                    const totalPrises = resas.reduce((acc: number, curr: any) => acc + (curr.places_reservees || 1), 0);
                    const isFull = totalPrises >= (trip.places_disponibles + totalPrises);
-                   
-                   // --- NOUVEAU : STATUT DE COURSE DYNAMIQUE ---
                    const isRunning = trip.statut_course === 'en_cours';
 
                    return (
@@ -491,14 +480,14 @@ export default function ERPAdmin() {
                        </div>
                        
                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4 flex justify-between items-center">
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Chauffeur</p>
-                            <p className="font-bold text-gray-900">{trip.conducteur_nom}</p>
-                          </div>
-                          <div className="text-right">
+                         <div>
+                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Chauffeur</p>
+                           <p className="font-bold text-gray-900">{trip.conducteur_nom}</p>
+                         </div>
+                         <div className="text-right">
                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Passagers</p>
                              <p className={`font-black text-lg ${isFull ? 'text-red-500' : 'text-yamo-teal'}`}>{totalPrises} / {trip.places_disponibles + totalPrises}</p>
-                          </div>
+                         </div>
                        </div>
 
                        <button onClick={() => openGPS(trip.lat, trip.lng)} disabled={!trip.lat} className={`w-full font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 ${trip.lat ? 'bg-gray-900 text-white hover:bg-black' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
@@ -532,100 +521,98 @@ export default function ERPAdmin() {
              </div>
           )}
 
-          {activeMenu === "recharges" && (
-             loadingRecharges ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
-             pendingRecharges.length === 0 && !dbError ? (
-              <div className="bg-white p-12 md:p-16 rounded-[2rem] text-center border border-gray-100 shadow-sm mx-4 md:mx-0">
-                <Receipt size={64} className="mx-auto text-gray-300 mb-4" />
-                <h3 className="text-2xl font-black">Aucune recharge en attente</h3>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-                {pendingRecharges.map(recharge => (
-                  <div key={recharge.id} className="bg-white p-5 md:p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest animate-pulse">En attente</div>
-                    <div className="flex items-center gap-4 mb-4 mt-2">
-                      <div className="w-12 h-12 bg-gray-100 text-gray-600 font-black text-xl rounded-full flex items-center justify-center flex-shrink-0">{recharge.profiles?.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
-                      <div className="overflow-hidden">
-                        <h4 className="font-black text-lg truncate leading-tight">{recharge.profiles?.full_name || 'Chauffeur'}</h4>
-                        <p className="text-xs font-bold text-gray-500 flex items-center gap-1"><Phone size={12}/> {recharge.profiles?.phone || 'N/A'}</p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl mb-4 border border-gray-100 text-center">
-                      <p className="text-3xl font-black text-yamo-teal">{recharge.montant} F</p>
-                      <p className="text-center font-bold text-sm text-gray-600 mt-2 bg-white py-1.5 rounded-lg border border-gray-200">Via {recharge.methode}</p>
-                    </div>
-                    <button onClick={() => handleValiderRecharge(recharge)} className="mt-auto w-full bg-green-500 text-white font-black py-4 rounded-xl hover:bg-green-600 transition shadow-lg shadow-green-500/20 flex justify-center items-center gap-2">
-                      <CheckCircle size={20} /> Valider le paiement
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )
+          {/* --- NOUVEL ÉCRAN : HISTORIQUE DES TRANSACTIONS --- */}
+          {activeMenu === "history" && (
+             loadingHistory ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
+             <div className="space-y-6">
+                <div className="flex justify-end">
+                  <button onClick={() => exportToCSV(transactionsHistory, "Yamoh_Transactions")} className="bg-gray-900 text-white font-bold py-2.5 px-5 rounded-xl hover:bg-black transition shadow-sm flex items-center gap-2">
+                    <Download size={18} /> Exporter CSV
+                  </button>
+                </div>
+                
+                <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
+                        <th className="p-4 md:p-6">Date</th><th className="p-4 md:p-6">Utilisateur</th><th className="p-4 md:p-6">Montant</th><th className="p-4 md:p-6">Moyen de paiement</th><th className="p-4 md:p-6">Statut API</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {transactionsHistory.length === 0 ? <tr><td colSpan={5} className="p-10 text-center text-gray-400 italic font-bold">Aucune transaction trouvée.</td></tr> :
+                       transactionsHistory.map(t => (
+                        <tr key={t.id} className="hover:bg-gray-50/50 transition">
+                          <td className="p-4 md:p-6 text-sm font-bold text-gray-500">{new Date(t.created_at).toLocaleString()}</td>
+                          <td className="p-4 md:p-6">
+                            <p className="font-bold text-sm text-gray-900">{t.profiles?.full_name || 'Inconnu'}</p>
+                            <p className="text-xs text-gray-500">{t.profiles?.phone}</p>
+                          </td>
+                          <td className="p-4 md:p-6"><span className={`font-black text-sm ${t.type === 'gain' ? 'text-green-600' : 'text-orange-500'}`}>{t.type === 'gain' ? '+' : ''}{t.montant} F</span></td>
+                          <td className="p-4 md:p-6"><span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-xs font-black uppercase">{t.methode || 'N/A'}</span></td>
+                          <td className="p-4 md:p-6">
+                            <span className={`px-2 py-1 text-[10px] font-black uppercase rounded-lg ${t.status === 'completed' || t.type === 'gain' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                              {t.status || 'Valide'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+             </div>
           )}
 
           {activeMenu === "users" && (
              loadingUsers ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
-             <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
-               <table className="w-full text-left border-collapse min-w-[600px]">
-                 <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
-                      <th className="p-4 md:p-6">Utilisateur</th><th className="p-4 md:p-6">Rôle</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Statut KYC</th><th className="p-4 md:p-6 text-right">Actions</th>
-                    </tr>
-                 </thead>
-                 <tbody className="divide-y divide-gray-50">
-                    {filteredUsers.map(u => (
-                      <tr key={u.id} className="hover:bg-gray-50/50 transition">
-                        <td className="p-4 md:p-6 flex items-center gap-3 md:gap-4">
-                          <div className="w-10 h-10 bg-yamo-teal/10 text-yamo-teal font-black rounded-full flex items-center justify-center flex-shrink-0">{u.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
-                          <div><p className="font-bold text-sm md:text-base truncate max-w-[150px]">{u.full_name || 'Utilisateur'}</p><p className="text-[10px] md:text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString()}</p></div>
-                        </td>
-                        <td className="p-4 md:p-6"><span className={`px-2 py-1 md:px-3 md:py-1 text-[10px] md:text-xs font-black uppercase rounded-lg ${u.role === 'chauffeur' ? 'bg-yamo-orange/10 text-yamo-orange' : 'bg-gray-100 text-gray-600'}`}>{u.role || 'Passager'}</span></td>
-                        <td className="p-4 md:p-6 font-medium text-xs md:text-sm">{u.phone || 'N/A'}</td>
-                        <td className="p-4 md:p-6">
-                          {u.verification_status === 'verifie' ? <span className="text-green-600 font-bold text-xs md:text-sm flex items-center gap-1"><CheckCircle2 size={14}/> <span className="hidden md:inline">Vérifié</span></span> :
-                           u.verification_status === 'en_attente' ? <span className="text-orange-500 font-bold text-xs md:text-sm flex items-center gap-1"><Clock size={14}/> <span className="hidden md:inline">Attente</span></span> :
-                           <span className="text-gray-400 font-bold text-xs md:text-sm flex items-center gap-1"><ShieldCheck size={14}/> <span className="hidden md:inline">Non initié</span></span>}
-                        </td>
-                        <td className="p-4 md:p-6 text-right flex justify-end gap-2">
-                          <button onClick={() => openInspectUser(u)} className="p-2 bg-gray-100 text-gray-600 hover:bg-yamo-teal hover:text-white rounded-xl transition" title="Inspecter"><Eye size={18} /></button>
-                          <button onClick={() => handleDeleteUser(u.id, u.full_name)} className="p-2 bg-gray-100 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition inline-flex justify-center" title="Supprimer"><Trash2 size={18} /></button>
-                        </td>
+             <div className="space-y-6">
+               <div className="flex justify-end">
+                  <button onClick={() => exportToCSV(filteredUsers, "Yamoh_Utilisateurs")} className="bg-gray-900 text-white font-bold py-2.5 px-5 rounded-xl hover:bg-black transition shadow-sm flex items-center gap-2">
+                    <Download size={18} /> Exporter CSV
+                  </button>
+               </div>
+               <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
+                 <table className="w-full text-left border-collapse min-w-[600px]">
+                   <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-black">
+                        <th className="p-4 md:p-6">Utilisateur</th><th className="p-4 md:p-6">Rôle</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Statut KYC</th><th className="p-4 md:p-6 text-right">Actions</th>
                       </tr>
-                    ))}
-                 </tbody>
-               </table>
+                   </thead>
+                   <tbody className="divide-y divide-gray-50">
+                      {filteredUsers.map(u => (
+                        <tr key={u.id} className="hover:bg-gray-50/50 transition">
+                          <td className="p-4 md:p-6 flex items-center gap-3 md:gap-4">
+                            <div className="w-10 h-10 bg-yamo-teal/10 text-yamo-teal font-black rounded-full flex items-center justify-center flex-shrink-0">{u.full_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                            <div><p className="font-bold text-sm md:text-base truncate max-w-[150px]">{u.full_name || 'Utilisateur'}</p><p className="text-[10px] md:text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString()}</p></div>
+                          </td>
+                          <td className="p-4 md:p-6"><span className={`px-2 py-1 md:px-3 md:py-1 text-[10px] md:text-xs font-black uppercase rounded-lg ${u.role === 'chauffeur' ? 'bg-yamo-orange/10 text-yamo-orange' : 'bg-gray-100 text-gray-600'}`}>{u.role || 'Passager'}</span></td>
+                          <td className="p-4 md:p-6 font-medium text-xs md:text-sm">{u.phone || 'N/A'}</td>
+                          <td className="p-4 md:p-6">
+                            {u.verification_status === 'verifie' ? <span className="text-green-600 font-bold text-xs md:text-sm flex items-center gap-1"><CheckCircle2 size={14}/> <span className="hidden md:inline">Vérifié</span></span> :
+                             u.verification_status === 'en_attente' ? <span className="text-orange-500 font-bold text-xs md:text-sm flex items-center gap-1"><Clock size={14}/> <span className="hidden md:inline">Attente</span></span> :
+                             <span className="text-gray-400 font-bold text-xs md:text-sm flex items-center gap-1"><ShieldCheck size={14}/> <span className="hidden md:inline">Non initié</span></span>}
+                          </td>
+                          <td className="p-4 md:p-6 text-right flex justify-end gap-2">
+                            <button onClick={() => openInspectUser(u)} className="p-2 bg-gray-100 text-gray-600 hover:bg-yamo-teal hover:text-white rounded-xl transition" title="Inspecter"><Eye size={18} /></button>
+                            <button onClick={() => handleDeleteUser(u.id, u.full_name)} className="p-2 bg-gray-100 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition inline-flex justify-center" title="Supprimer"><Trash2 size={18} /></button>
+                          </td>
+                        </tr>
+                      ))}
+                   </tbody>
+                 </table>
+               </div>
              </div>
           )}
 
           {activeMenu === "compta" && (
              loadingCompta ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
              <div className="space-y-6 md:space-y-8 animate-in fade-in duration-300">
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-                 <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100">
-                   <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4"><Activity size={24}/></div>
-                   <p className="text-gray-500 font-bold uppercase text-[10px] md:text-xs tracking-wider mb-1">Volume global (Brut)</p>
-                   <p className="text-2xl md:text-3xl font-black text-gray-900">{statsCompta.volumeGlobal.toLocaleString()} <span className="text-sm md:text-lg">F</span></p>
-                 </div>
-                 <div className="bg-gray-900 p-6 md:p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden">
-                   <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-bl-full pointer-events-none"></div>
-                   <div className="w-12 h-12 bg-white/10 text-yamo-teal rounded-full flex items-center justify-center mb-4"><TrendingUp size={24}/></div>
-                   <p className="text-gray-400 font-bold uppercase text-[10px] md:text-xs tracking-wider mb-1">Chiffre d'Affaires (10%)</p>
-                   <p className="text-3xl md:text-4xl font-black text-yamo-teal">{statsCompta.commissionYamoh.toLocaleString()} <span className="text-sm md:text-lg text-white">F</span></p>
-                 </div>
-                 <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100">
-                   <div className="w-12 h-12 bg-yamo-orange/10 text-yamo-orange rounded-full flex items-center justify-center mb-4"><Wallet size={24}/></div>
-                   <p className="text-gray-500 font-bold uppercase text-[10px] md:text-xs tracking-wider mb-1">Total Soldes Chauffeurs</p>
-                   <p className="text-2xl md:text-3xl font-black text-gray-900">{statsCompta.totalWallets.toLocaleString()} <span className="text-sm md:text-lg">F</span></p>
-                 </div>
-               </div>
-
+               
                <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
                  <div className="p-4 md:p-6 border-b border-gray-100 flex items-center gap-4 bg-orange-50/50">
                    <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><AlertTriangle size={24}/></div>
                    <div>
                      <h3 className="text-lg md:text-xl font-black text-gray-900">Recharge d'urgence / Espèces</h3>
-                     <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur.</p>
+                     <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur en cas de panne API.</p>
                    </div>
                  </div>
                  <table className="w-full text-left border-collapse min-w-[500px]">
@@ -641,7 +628,7 @@ export default function ERPAdmin() {
                          <td className="p-4 md:p-6"><span className={`font-black text-sm md:text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>{c.solde_wallet || 0} F</span></td>
                          <td className="p-4 md:p-6 text-right">
                            <button onClick={() => handleRechargerWallet(c)} className="bg-orange-100 text-orange-600 hover:bg-orange-500 hover:text-white font-bold px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 md:gap-2 ml-auto shadow-sm">
-                             <PlusCircle size={16}/> <span className="hidden sm:inline">Forcer Recharge</span>
+                             <PlusCircle size={16}/> <span className="hidden sm:inline">Dépôt Espèces</span>
                            </button>
                          </td>
                        </tr>
@@ -653,11 +640,68 @@ export default function ERPAdmin() {
           )}
 
           {activeMenu === "dashboard" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 animate-in fade-in duration-300">
-               <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100 flex items-center gap-4 md:gap-6"><div className="bg-yamo-teal/10 p-4 md:p-5 rounded-full text-yamo-teal"><Users size={28} className="md:w-8 md:h-8"/></div><div><p className="text-gray-500 font-bold uppercase text-xs">Utilisateurs</p><p className="text-2xl md:text-3xl font-black">{allUsers.length}</p></div></div>
-               <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100 flex items-center gap-4 md:gap-6"><div className="bg-yamo-orange/10 p-4 md:p-5 rounded-full text-yamo-orange"><CheckCircle2 size={28} className="md:w-8 md:h-8"/></div><div><p className="text-gray-500 font-bold uppercase text-xs">Billets Scannés</p><p className="text-2xl md:text-3xl font-black">{statsCompta.totalBillets}</p></div></div>
-               <div className="bg-gray-900 p-6 md:p-8 rounded-[2rem] shadow-xl text-white flex items-center gap-4 md:gap-6 sm:col-span-2 lg:col-span-1"><div className="bg-white/10 p-4 md:p-5 rounded-full text-white"><TrendingUp size={28} className="md:w-8 md:h-8"/></div><div><p className="text-gray-400 font-bold uppercase text-xs">Revenu Yamoh</p><p className="text-2xl md:text-3xl font-black text-yamo-teal">{statsCompta.commissionYamoh.toLocaleString()} F</p></div></div>
-            </div>
+             <div className="space-y-8 animate-in fade-in duration-300">
+               {/* Cartes KPI */}
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                  <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100 flex items-center gap-4 md:gap-6"><div className="bg-yamo-teal/10 p-4 md:p-5 rounded-full text-yamo-teal"><Users size={28} className="md:w-8 md:h-8"/></div><div><p className="text-gray-500 font-bold uppercase text-xs">Utilisateurs</p><p className="text-2xl md:text-3xl font-black">{allUsers.length}</p></div></div>
+                  <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-gray-100 flex items-center gap-4 md:gap-6"><div className="bg-yamo-orange/10 p-4 md:p-5 rounded-full text-yamo-orange"><CheckCircle2 size={28} className="md:w-8 md:h-8"/></div><div><p className="text-gray-500 font-bold uppercase text-xs">Billets Scannés</p><p className="text-2xl md:text-3xl font-black">{statsCompta.totalBillets}</p></div></div>
+                  <div className="bg-gray-900 p-6 md:p-8 rounded-[2rem] shadow-xl text-white flex items-center gap-4 md:gap-6 sm:col-span-2 lg:col-span-1"><div className="bg-white/10 p-4 md:p-5 rounded-full text-white"><TrendingUp size={28} className="md:w-8 md:h-8"/></div><div><p className="text-gray-400 font-bold uppercase text-xs">Revenu Yamoh</p><p className="text-2xl md:text-3xl font-black text-yamo-teal">{statsCompta.commissionYamoh.toLocaleString()} F</p></div></div>
+               </div>
+
+               {/* Graphiques Natives Tailwind */}
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 {/* Graphique 1 : Répartition des profils */}
+                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                   <h3 className="font-black text-lg mb-6">Répartition des Profils</h3>
+                   <div className="flex items-end gap-4 h-48 mt-4 border-b border-gray-100 pb-2">
+                     <div className="w-full flex flex-col items-center gap-2">
+                       <div className="w-16 bg-blue-500 rounded-t-xl" style={{ height: `${(allUsers.filter(u => u.role !== 'chauffeur').length / (allUsers.length || 1)) * 100}%`, minHeight: '10%' }}></div>
+                       <span className="text-xs font-bold text-gray-500 uppercase">Passagers</span>
+                       <span className="font-black">{allUsers.filter(u => u.role !== 'chauffeur').length}</span>
+                     </div>
+                     <div className="w-full flex flex-col items-center gap-2">
+                       <div className="w-16 bg-yamo-orange rounded-t-xl" style={{ height: `${(allUsers.filter(u => u.role === 'chauffeur').length / (allUsers.length || 1)) * 100}%`, minHeight: '10%' }}></div>
+                       <span className="text-xs font-bold text-gray-500 uppercase">Chauffeurs</span>
+                       <span className="font-black">{allUsers.filter(u => u.role === 'chauffeur').length}</span>
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Graphique 2 : Volume Financier */}
+                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
+                   <h3 className="font-black text-lg mb-6">Flux Financier Global</h3>
+                   <div className="space-y-6 mt-4">
+                     <div>
+                       <div className="flex justify-between mb-1">
+                         <span className="text-xs font-bold text-gray-500 uppercase">Volume Transactions (Brut)</span>
+                         <span className="font-black">{statsCompta.volumeGlobal.toLocaleString()} F</span>
+                       </div>
+                       <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+                         <div className="bg-gray-800 h-4 rounded-full" style={{ width: '100%' }}></div>
+                       </div>
+                     </div>
+                     <div>
+                       <div className="flex justify-between mb-1">
+                         <span className="text-xs font-bold text-gray-500 uppercase">Argent stocké (Wallets Chauffeurs)</span>
+                         <span className="font-black">{statsCompta.totalWallets.toLocaleString()} F</span>
+                       </div>
+                       <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+                         <div className="bg-blue-400 h-4 rounded-full" style={{ width: `${Math.min((statsCompta.totalWallets / (statsCompta.volumeGlobal || 1)) * 100, 100)}%` }}></div>
+                       </div>
+                     </div>
+                     <div>
+                       <div className="flex justify-between mb-1">
+                         <span className="text-xs font-bold text-gray-500 uppercase">Bénéfice Yamoh (10%)</span>
+                         <span className="font-black text-yamo-teal">{statsCompta.commissionYamoh.toLocaleString()} F</span>
+                       </div>
+                       <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+                         <div className="bg-yamo-teal h-4 rounded-full" style={{ width: '10%' }}></div>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
           )}
 
           {activeMenu === "kyc" && (
@@ -685,7 +729,7 @@ export default function ERPAdmin() {
         </div>
       </main>
 
-      {/* --- NOUVEAU MODAL : INSPECTION COMPLÈTE UTILISATEUR (LA LOUPE) --- */}
+      {/* --- MODAL : INSPECTION COMPLÈTE UTILISATEUR (LA LOUPE) --- */}
       {inspectUser && (
         <div className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4 backdrop-blur-md">
           <div className="bg-white rounded-[3rem] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
@@ -793,7 +837,7 @@ export default function ERPAdmin() {
 
 function MenuBtn({ icon, label, active, badge, onClick, isAlert }: any) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-3.5 md:py-3 rounded-xl transition-all ${active ? (isAlert ? 'bg-red-600 text-white shadow-lg' : 'bg-yamo-teal text-white shadow-lg') : (isAlert ? 'text-red-400 hover:bg-red-950 hover:text-red-300' : 'text-gray-400 hover:text-white hover:bg-gray-800')}`}>
+    <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-3.5 md:py-3 rounded-xl transition-all ${active ? (isAlert ? 'bg-red-600 text-white shadow-lg' : 'bg-gray-900 text-white shadow-lg') : (isAlert ? 'text-red-400 hover:bg-red-950 hover:text-red-300' : 'text-gray-400 hover:text-white hover:bg-gray-800')}`}>
       <div className="flex items-center gap-3 font-bold">{icon} <span className="md:text-sm">{label}</span></div>
       {badge !== undefined && badge > 0 && <span className={`text-white text-xs font-black px-2.5 py-0.5 rounded-full animate-pulse ${isAlert ? 'bg-red-900' : 'bg-red-500'}`}>{badge}</span>}
     </button>
