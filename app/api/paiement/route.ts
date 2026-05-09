@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // On réceptionne TOUTES les clés envoyées par l'app Flutter
     const { amount, payment_method, gateway, phone, name, userId } = body;
 
     const geniusPayResponse = await fetch('https://pay.genius.ci/api/v1/merchant/payments', { 
@@ -16,12 +15,11 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         amount: amount,
         currency: 'XOF',
-        // ON UTILISE LES VARIABLES ENVOYÉES DEPUIS FLUTTER
         payment_method: payment_method, 
         gateway: gateway, 
         customer: {
           name: name || "Client Yamoh",
-          phone: phone 
+          phone: phone || "+22500000000"
         },
         metadata: {
           user_id: userId 
@@ -37,9 +35,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: json.error?.message || "Erreur GeniusPay" }, { status: 400 });
     }
 
-    // ON PRIORISE LE LIEN DIRECT (payment_url) AVANT LA PAGE GLOBALE (checkout_url)
     const paymentUrl = json.data.payment_url || json.data.checkout_url;
-
     return NextResponse.json({ url: paymentUrl });
 
   } catch (error) {
