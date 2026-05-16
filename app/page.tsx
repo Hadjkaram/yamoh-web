@@ -1,542 +1,282 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
-  Search, Calendar, User, PlusCircle, ShieldCheck, 
-  SmartphoneNfc, PiggyBank, LogOut, ChevronDown, 
-  Car, MessageSquare, CreditCard, Ticket, ArrowRight,
-  Share2, MapPin, History, Clock, Users, Navigation, Compass
+  ShieldCheck, Users, MapPin, Smartphone, 
+  ArrowRight, Menu, X, LockKeyhole, HeartHandshake,
+  CheckCircle2, Music
 } from "lucide-react";
-import { supabase } from "@/lib/supabase"; 
-import NotificationBell from "@/components/NotificationBell";
 
-// --- COMPOSANT INTELLIGENT D'AUTO-COMPLÉTION ---
-function LocationAutocomplete({ placeholder, value, onChange, dotColor, borderClass }: any) {
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [history, setHistory] = useState<string[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+export default function LandingPage() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const savedHistory = JSON.parse(localStorage.getItem('yamoh_search_history') || '[]');
-    setHistory(savedHistory);
+    const handleScroll = () => setScrolled(window.scrollY > 50);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const fetchSuggestions = async (query: string) => {
-    onChange(query);
-    if (query.length < 2) {
-      setSuggestions([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}, Abidjan, Côte d'Ivoire&limit=5`);
-      const data = await res.json();
-      setSuggestions(data);
-    } catch (error) {
-      console.error("Erreur de recherche d'adresse", error);
-    }
-    setLoading(false);
-  };
-
-  const handleSelect = (adresse: string) => {
-    onChange(adresse);
-    setShowDropdown(false);
-    const newHistory = [adresse, ...history.filter(h => h !== adresse)].slice(0, 5);
-    setHistory(newHistory);
-    localStorage.setItem('yamoh_search_history', JSON.stringify(newHistory));
-  };
 
   return (
-    <div className={`flex items-center flex-1 px-6 py-5 w-full relative transition group ${borderClass}`} ref={wrapperRef}>
-      <div className={`w-5 h-5 rounded-full border-[3px] mr-4 transition ${dotColor}`}></div>
-      <input 
-        type="text" 
-        placeholder={placeholder} 
-        className="outline-none w-full text-lg text-gray-800 placeholder-gray-400 font-bold bg-transparent" 
-        value={value} 
-        onChange={(e) => {
-          fetchSuggestions(e.target.value);
-          setShowDropdown(true);
-        }}
-        onFocus={() => setShowDropdown(true)}
-      />
-
-      {showDropdown && (value.length > 0 || history.length > 0) && (
-        <div className="absolute top-[100%] left-0 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-          {value.length === 0 && history.length > 0 && (
-            <div className="p-2">
-              <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Recherches récentes</p>
-              {history.map((histItem, idx) => (
-                <div key={idx} onClick={() => handleSelect(histItem)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer rounded-xl transition">
-                  <History size={18} className="text-gray-400" />
-                  <span className="font-medium text-gray-700">{histItem}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {value.length >= 2 && (
-            <div className="p-2">
-              <p className="text-xs font-bold text-gray-400 uppercase ml-4 mb-2 mt-2">Lieux trouvés</p>
-              {loading ? (
-                <div className="px-4 py-3 text-gray-500 font-medium text-sm italic">Recherche en cours...</div>
-              ) : suggestions.length > 0 ? (
-                suggestions.map((item, idx) => (
-                  <div key={idx} onClick={() => handleSelect(item.display_name.split(',')[0])} className="flex items-start gap-3 px-4 py-3 hover:bg-[#E8F4F8] cursor-pointer rounded-xl transition group/item">
-                    <MapPin size={20} className="text-yamo-teal mt-0.5 opacity-50 group-hover/item:opacity-100 transition" />
-                    <div>
-                      <p className="font-bold text-gray-900">{item.display_name.split(',')[0]}</p>
-                      <p className="text-xs text-gray-500 line-clamp-1">{item.display_name.split(',').slice(1).join(',')}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="px-4 py-3 text-gray-500 font-medium text-sm italic">Aucun lieu trouvé pour "{value}"</div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function Home() {
-  const router = useRouter();
-
-  const [depart, setDepart] = useState("");
-  const [destination, setDestination] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [passagers, setPassagers] = useState("1");
-  
-  const [user, setUser] = useState<any>(null);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-
-  // ÉTAT POUR LES TRAJETS EN TEMPS RÉEL
-  const [liveTrips, setLiveTrips] = useState<any[]>([]);
-  const [loadingTrips, setLoadingTrips] = useState(true);
-
-  // --- NOUVEAU : WIDGET GPS CHAUFFEUR ---
-  const [activeTrip, setActiveTrip] = useState<any>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) checkActiveTrip(session.user);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) checkActiveTrip(session.user);
-      else setActiveTrip(null);
-    });
-
-    // --- RÉCUPÉRATION DES TRAJETS DEPUIS SUPABASE ---
-    const fetchLiveTrips = async () => {
-      const today = new Date().toISOString().split('T')[0];
+    <main className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans selection:bg-[#166C82] selection:text-white overflow-x-hidden relative">
       
-      const { data, error } = await supabase
-        .from('trajets')
-        .select('*')
-        .gte('date_depart', today)
-        // On ne montre que les trajets prévus ou en cours sur l'accueil, pas ceux terminés
-        .neq('statut_course', 'termine') 
-        .order('date_depart', { ascending: true })
-        .limit(6); 
+      {/* Taches de couleurs en fond (Effet Premium Blur) */}
+      <div className="fixed top-[-20%] left-[-10%] w-[50vw] h-[50vw] bg-[#166C82]/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
+      <div className="fixed bottom-[-20%] right-[-10%] w-[40vw] h-[40vw] bg-[#E66825]/10 rounded-full blur-[100px] pointer-events-none z-0"></div>
 
-      if (data && !error) {
-        setLiveTrips(data);
-      }
-      setLoadingTrips(false);
-    };
-
-    fetchLiveTrips();
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // --- VÉRIFIER SI LE CHAUFFEUR A UNE COURSE EN COURS ---
-  const checkActiveTrip = async (currentUser: any) => {
-    if (currentUser?.user_metadata?.role !== 'chauffeur') return;
-    
-    const { data } = await supabase
-      .from('trajets')
-      .select('id, depart, destination')
-      .eq('user_id', currentUser.id)
-      .eq('statut_course', 'en_cours')
-      .single(); // Un chauffeur ne peut avoir qu'une seule course en cours
-
-    if (data) setActiveTrip(data);
-  };
-
-  const handleSearch = () => {
-    if (!depart || !destination) {
-      alert("Dites-nous où vous allez pour qu'on cherche vos chauffeurs !");
-      return;
-    }
-    router.push(`/recherche?depart=${encodeURIComponent(depart)}&destination=${encodeURIComponent(destination)}&date=${date}&passagers=${passagers}`);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setShowUserMenu(false);
-    alert("À la prochaine sur Yamoh !");
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "Date à préciser";
-    const options: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'short' };
-    return new Date(dateString).toLocaleDateString('fr-FR', options);
-  };
-
-  return (
-    <main className="min-h-screen bg-white flex flex-col font-sans">
-      
-      {/* ANIMATIONS CSS GLOBALES POUR L'ACCUEIL */}
-      <style>{`
-        @keyframes drive {
-          0% { transform: translateX(-150px); }
-          100% { transform: translateX(100vw); }
-        }
-        .animate-drive {
-          animation: drive 18s linear infinite;
-        }
-        .city-skyline {
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 200'%3E%3Cpath fill='%23166C82' d='M0,200 L0,150 L50,150 L50,100 L90,100 L90,160 L140,160 L140,80 L200,80 L200,120 L250,120 L250,60 L300,60 L300,140 L350,140 L350,90 L420,90 L420,150 L480,150 L480,40 L530,40 L530,130 L600,130 L600,70 L650,70 L650,160 L700,160 L700,110 L760,110 L760,140 L820,140 L820,80 L880,80 L880,150 L950,150 L950,100 L1000,100 L1000,200 Z'/%3E%3C/svg%3E");
-          background-repeat: repeat-x;
-          background-size: 800px 100%;
-          background-position: bottom;
-        }
-        @keyframes pulse-ring {
-          0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-          70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
-        }
-        .animate-radar {
-          animation: pulse-ring 2s infinite cubic-bezier(0.66, 0, 0, 1);
-        }
-      `}</style>
-
-      {/* --- HEADER --- */}
-      <header className="flex items-center justify-between px-6 py-4 bg-white sticky top-0 z-50 shadow-sm border-b border-gray-100">
-        <Link href="/" className="flex items-center gap-2">
-           <img 
-             src="/Yamo_Logo.png" 
-             alt="Yamo Logo" 
-             className="h-20 md:h-28 w-auto object-contain cursor-pointer transition-transform hover:scale-105" 
-           />
-        </Link>
-        
-        <div className="flex items-center gap-4">
-          <Link href="/publier" className="hidden md:flex items-center gap-2 text-yamo-teal font-bold hover:bg-gray-50 px-4 py-2 rounded-full transition">
-            <PlusCircle size={20} />
-            Proposer un trajet
+      {/* --- NAVBAR GLASSMORPHISM --- */}
+      <header className={`fixed top-0 w-full z-50 transition-all duration-500 ${scrolled ? "bg-white/60 backdrop-blur-2xl border-b border-white/50 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.03)]" : "bg-transparent py-6"}`}>
+        <div className="max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+             <img src="/Yamo_Logo.png" alt="Yamoh Logo" className="h-12 md:h-16 w-auto object-contain" />
           </Link>
+          
+          <nav className="hidden md:flex items-center gap-10">
+            <a href="#vision" className="text-sm font-bold text-gray-700 hover:text-[#E66825] transition-colors">Vision</a>
+            <a href="#communaute" className="text-sm font-bold text-gray-700 hover:text-[#E66825] transition-colors">Communauté</a>
+            <a href="#securite" className="text-sm font-bold text-gray-700 hover:text-[#E66825] transition-colors">Sécurité</a>
+          </nav>
 
-          {user ? (
-            <div className="flex items-center gap-3 relative">
-              <NotificationBell userId={user.id} />
-              <div className="relative">
-                <button 
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 p-1 pr-3 rounded-full hover:bg-gray-100 border border-gray-200 transition cursor-pointer"
-                >
-                  <div className="w-10 h-10 bg-yamo-teal rounded-full flex items-center justify-center text-white text-sm font-bold shadow-inner">
-                    {user.user_metadata?.full_name?.charAt(0).toUpperCase()}
-                  </div>
-                  <ChevronDown size={16} className={`text-gray-500 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
-                </button>
-                {showUserMenu && (
-                  <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden py-2 animate-in fade-in zoom-in duration-150">
-                    <Link href="/publier" className="px-6 py-3 hover:bg-gray-50 flex md:hidden items-center gap-3 text-yamo-teal font-black transition border-b border-gray-50" onClick={() => setShowUserMenu(false)}>
-                      <PlusCircle size={18} /> Proposer un trajet
-                    </Link>
-                    <Link href="/dashboard" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><Car size={18} /> Vos trajets</Link>
-                    <Link href="/mes-trajets" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><Ticket size={18} /> Mes billets</Link>
-                    <Link href="/messages" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><MessageSquare size={18} /> Messages</Link>
-                    <Link href="/profil" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition border-b border-gray-50" onClick={() => setShowUserMenu(false)}><User size={18} /> Profil</Link>
-                    <Link href="/paiements" className="px-6 py-3 hover:bg-gray-50 flex items-center gap-3 text-gray-700 font-medium transition" onClick={() => setShowUserMenu(false)}><CreditCard size={18} /> Paiements</Link>
-                    <button onClick={handleLogout} className="px-6 py-3 hover:bg-red-50 flex items-center gap-3 text-red-600 font-bold w-full text-left transition border-t border-gray-50"><LogOut size={18} /> Déconnexion</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <Link href="/connexion">
-              <button className="flex items-center gap-2 text-yamo-teal font-bold hover:bg-gray-100 p-3 rounded-full transition cursor-pointer">
-                <User size={24} />
-              </button>
-            </Link>
-          )}
+          <div className="hidden md:flex items-center">
+            <a href="#download" className="bg-[#166C82] hover:bg-[#115566] text-white font-bold px-8 py-3.5 rounded-full transition-all flex items-center gap-2 shadow-lg shadow-[#166C82]/30 hover:-translate-y-1">
+              Obtenir l'App
+            </a>
+          </div>
+
+          <button className="md:hidden text-gray-900 bg-white/50 backdrop-blur p-2 rounded-full" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
         </div>
       </header>
 
-      {/* --- HERO SECTION --- */}
-      <section className="relative flex flex-col items-center justify-center pt-16 pb-32 bg-[#E8F4F8] px-4 text-center overflow-hidden">
-        
-        <div className="absolute bottom-0 left-0 w-full h-48 city-skyline opacity-10 pointer-events-none"></div>
-
-        <div className="absolute bottom-12 left-0 animate-drive pointer-events-none z-10">
-          <svg width="100" height="40" viewBox="0 0 100 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M15 30 C 15 30, 15 15, 30 15 L 45 5 L 75 5 L 90 20 C 95 20, 95 30, 95 30 Z" fill="#166C82"/>
-            <circle cx="35" cy="30" r="8" fill="#D55A1A"/>
-            <circle cx="75" cy="30" r="8" fill="#D55A1A"/>
-            <path d="M 47 7 L 68 7 L 82 18 L 47 18 Z" fill="#E8F4F8"/>
-          </svg>
+      {/* Menu Mobile */}
+      {isMenuOpen && (
+        <div className="md:hidden fixed inset-0 bg-white/95 backdrop-blur-xl z-40 flex flex-col items-center justify-center gap-10 font-black text-4xl text-gray-900 animate-in fade-in duration-300">
+          <a href="#vision" onClick={() => setIsMenuOpen(false)}>Vision</a>
+          <a href="#communaute" onClick={() => setIsMenuOpen(false)}>Communauté</a>
+          <a href="#securite" onClick={() => setIsMenuOpen(false)}>Sécurité</a>
+          <a href="#download" onClick={() => setIsMenuOpen(false)} className="bg-[#E66825] text-white text-3xl px-8 py-4 rounded-full mt-4">Obtenir l'App</a>
         </div>
+      )}
 
-        <h1 className="relative z-20 text-4xl md:text-5xl lg:text-7xl font-extrabold text-yamo-teal mb-12 max-w-4xl tracking-tight leading-[1.1]">
-          On fait la route ensemble.
-        </h1>
-
-        {/* NOUVEAU : WIDGET GPS CHAUFFEUR EN COURS */}
-        {activeTrip && (
-          <div className="relative z-30 bg-green-50 border-2 border-green-500 rounded-[2rem] p-6 w-full max-w-3xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl animate-in zoom-in duration-300">
-            <div className="flex items-center gap-4 text-left">
-              <div className="w-14 h-14 bg-green-500 text-white rounded-full flex items-center justify-center animate-radar shadow-lg">
-                <Navigation size={28} className="animate-pulse" />
-              </div>
-              <div>
-                <p className="text-green-700 font-black uppercase text-xs tracking-widest mb-1">Course en direct</p>
-                <h3 className="text-xl font-black text-gray-900 line-clamp-1">{activeTrip.destination.split(',')[0]}</h3>
-                <p className="text-sm font-bold text-gray-500">Depuis {activeTrip.depart.split(',')[0]}</p>
+      {/* --- HERO SECTION (Typo géante & 2 Iphones Dissociés) --- */}
+      <section className="relative pt-40 pb-20 lg:pt-56 lg:pb-32 px-6 lg:px-12 max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16 z-10 overflow-hidden">
+        
+        <div className="flex-1 w-full text-center lg:text-left z-20 relative">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/60 backdrop-blur-md border border-white text-[#166C82] font-bold text-xs uppercase tracking-widest mb-8 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-[#E66825] animate-pulse"></span>
+            100% Social • 100% Ivoirien
+          </div>
+          <h1 className="text-6xl lg:text-[5.5rem] font-black text-[#0f172a] leading-[1] mb-8 tracking-tighter">
+            Partagez la route.<br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#166C82] to-[#E66825]">
+              Vivez l'instant.
+            </span>
+          </h1>
+          <p className="text-xl text-gray-500 mb-12 leading-relaxed max-w-xl mx-auto lg:mx-0 font-medium">
+            Le premier réseau communautaire pour vos déplacements quotidiens et vos sorties festives à Abidjan. Pas de VTC, juste de l'entraide et de l'enjaillement entre Ivoiriens sûrs.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+            <a href="#download" className="bg-[#0f172a] text-white px-8 py-4.5 rounded-full font-bold text-lg hover:shadow-2xl hover:-translate-y-1 transition-all w-full sm:w-auto text-center">
+              Rejoindre la famille
+            </a>
+          </div>
+        </div>
+        
+        {/* Les 2 Iphones Dissociés et Fun */}
+        <div className="flex-1 relative w-full h-[600px] flex items-center justify-center lg:justify-end gap-6 z-10 mt-16 lg:mt-0">
+          
+          {/* Téléphone 1 (Quotidien) - Penché à gauche */}
+          <div className="relative w-[280px] h-[580px] bg-black rounded-[2.5rem] border-[10px] border-gray-900 shadow-2xl transform -rotate-3 -translate-x-8 translate-y-6 overflow-hidden flex-shrink-0 transition-transform duration-700 hover:rotate-0 hover:scale-105">
+            {/* Dynamic Island */}
+            <div className="absolute top-2.5 left-1/2 transform -translate-x-1/2 w-24 h-7 bg-black rounded-full z-30"></div>
+            {/* Image et Interface Quotidien */}
+            <div className="absolute inset-0 bg-[#F8FAFC] z-20">
+              <img src="/photo de groupe d'amis souriants en voiture.jpg" alt="Quotidien" className="w-full h-full object-cover grayscale-0 group-hover:grayscale-0" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a]/70 to-transparent flex flex-col justify-end p-6">
+                <p className="text-white font-black text-lg">Quotidien Solidaire 🤝</p>
+                <div className="mt-2 bg-white/20 backdrop-blur-md border border-white/30 rounded-lg p-2 text-white text-xs font-bold flex justify-between items-center">
+                  <span>Cocody ➔ Plateau</span>
+                  <span>1500 F</span>
+                </div>
               </div>
             </div>
-            <Link href="/dashboard" className="w-full md:w-auto">
-              <button className="w-full bg-gray-900 text-white font-black px-8 py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-black transition shadow-xl">
-                <Compass size={20} /> Gérer ma course
-              </button>
-            </Link>
           </div>
-        )}
 
-        <div className="relative z-30 bg-white rounded-3xl md:rounded-full shadow-2xl p-2 flex flex-col md:flex-row items-center w-full max-w-5xl border border-white/50">
+          {/* Téléphone 2 (Vivez l'instant - Event) - Penché à droite */}
+          <div className="relative w-[280px] h-[580px] bg-black rounded-[2.5rem] border-[10px] border-gray-900 shadow-2xl transform rotate-6 translate-x-8 -translate-y-12 overflow-hidden flex-shrink-0 transition-transform duration-700 hover:rotate-0 hover:scale-105">
+            {/* Dynamic Island */}
+            <div className="absolute top-2.5 left-1/2 transform -translate-x-1/2 w-24 h-7 bg-black rounded-full z-30"></div>
+            {/* Image et Interface Event */}
+            <div className="absolute inset-0 bg-[#F8FAFC] z-20">
+              <img src="/photo d'amis festifs : Concert.jpg" alt="Concert" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#E66825]/90 via-[#E66825]/40 to-transparent flex flex-col justify-end p-6">
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-[#E66825] mb-2"><Music size={20}/></div>
+                <p className="text-white font-black text-xl leading-tight">Vivez l'Instant.<br/>L'Enjaillement Partagé.</p>
+                <div className="mt-2 text-white/90 text-sm font-medium">Concert, Match, Festival...<br/>Commencez l'ambiance dès la voiture.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- VISION (Focus Événement & Solidaire) --- */}
+      <section id="vision" className="py-24 px-6 lg:px-12 relative z-10 overflow-hidden">
+        <div className="absolute top-0 right-0 w-[40vw] h-[40vw] bg-[#E66825]/5 rounded-full blur-[100px]"></div>
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-16">
+            <h2 className="text-4xl lg:text-5xl font-black text-[#0f172a] tracking-tight leading-[1.1]">Yamoh, le bienfait de<br/>se déplacer ensemble.</h2>
+          </div>
+
+          {/* Style Bento Box UX/UI Premium */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
+            {/* Box 1 (Événement/Vivez l'instant) - Grand */}
+            <div className="md:col-span-2 bg-[#0f172a] text-white p-12 lg:p-14 rounded-[3rem] shadow-xl hover:shadow-2xl transition-all relative overflow-hidden flex flex-col justify-between">
+              <div className="relative z-10">
+                <div className="w-16 h-16 bg-[#E66825]/20 text-[#E66825] rounded-2xl flex items-center justify-center mb-10 border border-[#E66825]/20">
+                  <Music size={32} />
+                </div>
+                <h3 className="text-3xl lg:text-4xl font-black mb-6 leading-tight">L'Enjaillement commence ici.</h3>
+                <p className="text-gray-300 font-medium text-lg leading-relaxed max-w-xl">
+                  Yamoh est le bienfait de vos sorties festives. Ne galérez plus pour rentrer d'un concert ou d'un match. Rejoignez un trajet d'ambiance avec d'autres fans, divisez le péage et le parking, et voyagez en toute sécurité avec la famille.
+                </p>
+              </div>
+              <div className="absolute -bottom-20 -right-20 text-[#E66825]/10">
+                <Music size={300} />
+              </div>
+            </div>
+
+            {/* Box 2 (Solidaire) - Petit */}
+            <div className="md:col-span-1 bg-white p-12 lg:p-14 rounded-[3rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all">
+              <div className="w-16 h-16 bg-[#166C82]/10 text-[#166C82] rounded-2xl flex items-center justify-center mb-10">
+                <HeartHandshake size={32} />
+              </div>
+              <h3 className="text-2xl font-black mb-4 tracking-tight">Solidaire à Babi</h3>
+              <p className="text-gray-500 font-medium leading-relaxed">
+                Le bienfait de s'arranger entre voisins pour le travail ou l'université. Amortissez vos frais d'essence sans stress.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- COMMUNAUTÉ --- */}
+      <section id="communaute" className="py-24 px-6 lg:px-12 max-w-7xl mx-auto relative z-10">
+        <div className="flex flex-col items-center text-center mb-16">
+          <h2 className="text-4xl lg:text-5xl font-black text-[#0f172a] tracking-tight mb-4">L'humain au centre</h2>
+          <p className="text-xl text-gray-500 max-w-2xl font-medium">Yamoh est un réseau social physique. Derrière chaque trajet se cache une belle rencontre personnelle ou professionnelle.</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="p-10 bg-white/40 backdrop-blur-xl border border-white/60 rounded-[3rem] shadow-[0_10px_40px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:bg-white/60 transition-colors">
+            <div>
+              <div className="w-14 h-14 bg-[#166C82]/10 text-[#166C82] rounded-2xl flex items-center justify-center mb-6"><Users size={28}/></div>
+              <h3 className="text-2xl font-black mb-4 tracking-tight">Vous avez une voiture ?</h3>
+              <p className="text-gray-600 font-medium leading-relaxed mb-8">Amortissez vos trajets quotidiens ou vos sorties en proposant vos places vides. Choisissez vos compagnons de route grâce à leurs profils détaillés.</p>
+            </div>
+            <Link href="/communaute" className="inline-flex items-center gap-2 font-bold text-[#166C82] hover:gap-3 transition-all">Découvrir la charte <ArrowRight size={18}/></Link>
+          </div>
+
+          <div className="p-10 bg-white/40 backdrop-blur-xl border border-white/60 rounded-[3rem] shadow-[0_10px_40px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:bg-white/60 transition-colors">
+            <div>
+              <div className="w-14 h-14 bg-[#E66825]/10 text-[#E66825] rounded-2xl flex items-center justify-center mb-6"><HeartHandshake size={28}/></div>
+              <h3 className="text-2xl font-black mb-4 tracking-tight">Vous cherchez une place ?</h3>
+              <p className="text-gray-600 font-medium leading-relaxed mb-8">Voyagez confortablement sans le stress du transport classique. Participez équitablement aux frais avec un membre fiable de la communauté.</p>
+            </div>
+            <Link href="/communaute" className="inline-flex items-center gap-2 font-bold text-[#E66825] hover:gap-3 transition-all">Rejoindre le mouvement <ArrowRight size={18}/></Link>
+          </div>
+        </div>
+      </section>
+
+      {/* --- SÉCURITÉ --- */}
+      <section id="securite" className="py-24 px-6 lg:px-12 bg-white rounded-[4rem] mx-4 lg:mx-12 shadow-[0_30px_60px_rgba(0,0,0,0.05)] border border-gray-100 relative z-10 overflow-hidden mb-24">
+        <div className="absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] bg-[#166C82]/10 rounded-full blur-[100px]"></div>
+        <div className="max-w-7xl mx-auto flex flex-col-reverse lg:flex-row items-center gap-16">
           
-          <LocationAutocomplete 
-            placeholder="Départ (ex: Angré)" 
-            value={depart} 
-            onChange={setDepart} 
-            dotColor="border-gray-300 group-focus-within:border-yamo-teal"
-            borderClass="border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 rounded-t-2xl md:rounded-l-full"
-          />
-
-          <LocationAutocomplete 
-            placeholder="Destination (ex: Plateau)" 
-            value={destination} 
-            onChange={setDestination} 
-            dotColor="border-yamo-orange"
-            borderClass="border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50"
-          />
-
-          <div className="flex items-center px-6 py-5 w-full md:w-auto border-b md:border-b-0 md:border-r border-gray-100 hover:bg-gray-50 transition">
-            <Calendar size={24} className="text-gray-400 mr-3" />
-            <input type="date" className="outline-none text-lg text-gray-800 font-bold bg-transparent cursor-pointer" value={date} onChange={(e) => setDate(e.target.value)} />
+          {/* Cadre Image Penché & Fun */}
+          <div className="flex-1 w-full max-w-lg relative">
+            <div className="w-full aspect-[4/3] transform -rotate-3 translate-x-8 translate-y-4 rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white/60 group hover:rotate-0 transition-transform duration-500">
+              {/* L'IMAGE SÉCURITÉ/VERIFIED UPLOADÉE (PLACEHOLDER) */}
+              <img 
+                src="/securite_verified.jpg" 
+                alt="Communauté Vérifiée" 
+                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
+              />
+              {/* Icône de confiance superposée en Glassmorphism */}
+              <div className="absolute top-6 left-6 bg-white/20 backdrop-blur-xl border border-white/30 px-4 py-2 rounded-full flex items-center gap-2">
+                <ShieldCheck size={20} className="text-green-400" />
+                <span className="text-white font-bold text-sm tracking-wide">Communauté Vérifiée (KYC)</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center px-6 py-5 w-full md:w-auto hover:bg-gray-50 transition">
-            <User size={24} className="text-gray-400 mr-3" />
-            <select className="outline-none text-lg text-gray-800 font-bold bg-transparent cursor-pointer appearance-none" value={passagers} onChange={(e) => setPassagers(e.target.value)}>
-              {[1,2,3,4].map(n => <option key={n} value={n}>{n} {n > 1 ? 'passagers' : 'passager'}</option>)}
-            </select>
+
+          <div className="flex-1">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#166C82]/10 border border-[#166C82]/10 text-[#166C82] font-bold text-xs uppercase tracking-widest mb-8 shadow-sm">
+              <LockKeyhole size={14}/>
+              Confiance Infaillible
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-black text-[#0f172a] mb-6 tracking-tight leading-[1.1]">
+              Voyagez en famille,<br/><span className="text-[#E66825]">l'esprit tranquille.</span>
+            </h2>
+            <p className="text-xl text-gray-500 mb-10 leading-relaxed font-medium">
+              Parce qu'une communauté repose avant tout sur la confiance, nous avons mis en place les meilleurs standards de sécurité. Zéro anonymat pour les profils.
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 mb-10">
+              <div className="flex items-center gap-3 font-bold text-[#0f172a] bg-[#F8FAFC] p-4 rounded-xl border border-gray-100"><CheckCircle2 className="text-green-500"/> CNI Vérifiée (KYC)</div>
+              <div className="flex items-center gap-3 font-bold text-[#0f172a] bg-[#F8FAFC] p-4 rounded-xl border border-gray-100"><CheckCircle2 className="text-green-500"/> Avis & Notes</div>
+              <div className="flex items-center gap-3 font-bold text-[#0f172a] bg-[#F8FAFC] p-4 rounded-xl border border-gray-100"><CheckCircle2 className="text-green-500"/> Suivi GPS Temps Réel</div>
+              <div className="flex items-center gap-3 font-bold text-[#0f172a] bg-[#F8FAFC] p-4 rounded-xl border border-gray-100"><CheckCircle2 className="text-red-500"/> Bouton SOS intégré</div>
+            </div>
+
+            <Link href="/securite" className="inline-flex items-center gap-2 font-bold text-[#166C82] hover:gap-3 transition-all">Lire notre politique de sécurité <ArrowRight size={18}/></Link>
           </div>
-          <button onClick={handleSearch} className="w-full md:w-auto bg-yamo-orange hover:bg-[#D55A1A] text-white font-black text-xl px-12 py-5 rounded-2xl md:rounded-full transition mt-2 md:mt-0 md:ml-2 shadow-xl shadow-yamo-orange/30">
-            C'est parti !
+        </div>
+      </section>
+
+      {/* --- CTA FINAL --- */}
+      <section id="download" className="py-24 px-6 text-center max-w-4xl mx-auto relative z-10">
+        <h2 className="text-5xl lg:text-6xl font-black text-[#0f172a] mb-8 tracking-tighter">Prêt à rejoindre la famille ?</h2>
+        <p className="text-xl text-gray-500 mb-12 font-medium max-w-xl mx-auto">Créez votre profil en 2 minutes et découvrez les trajets solidaires et les ambiances de Babi autour de vous.</p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-12">
+          <button className="flex items-center justify-center gap-4 bg-black text-white px-8 py-5 rounded-2xl hover:scale-105 hover:shadow-2xl transition w-full sm:w-auto group">
+            <Smartphone size={28}/>
+            <div className="text-left leading-none"><p className="text-[10px] uppercase font-bold text-gray-400">Télécharger sur</p><p className="text-xl font-black mt-1">App Store</p></div>
+          </button>
+          <button className="flex items-center justify-center gap-4 bg-black text-white px-8 py-5 rounded-2xl hover:scale-105 hover:shadow-2xl transition w-full sm:w-auto group">
+            <Smartphone size={28}/>
+            <div className="text-left leading-none"><p className="text-[10px] uppercase font-bold text-gray-400">Disponible sur</p><p className="text-xl font-black mt-1">Google Play</p></div>
           </button>
         </div>
       </section>
 
-      {/* --- TRAJETS EN TEMPS RÉEL --- */}
-      <section className="py-24 px-6 max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-4">
-          <div>
-            <h2 className="text-4xl font-black text-gray-900 flex items-center gap-3">
-              Trajets disponibles
-              <span className="relative flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
-              </span>
-            </h2>
-            <p className="text-gray-500 text-lg mt-2 font-medium">Réservez directement votre place avec nos chauffeurs.</p>
-          </div>
-        </div>
-
-        {loadingTrips ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="bg-gray-50 rounded-[2.5rem] h-64 animate-pulse border border-gray-100"></div>
-            ))}
-          </div>
-        ) : liveTrips.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {liveTrips.map((trip) => {
-              const lienDepart = trip.depart ? encodeURIComponent(trip.depart.split(',')[0]) : "";
-              const lienDest = trip.destination ? encodeURIComponent(trip.destination.split(',')[0]) : "";
-              const lienDate = trip.date_depart ? trip.date_depart.split('T')[0] : "";
-              
-              // On vérifie si le trajet est "en_cours" pour afficher le badge Live
-              const isRunning = trip.statut_course === 'en_cours';
-              
-              return (
-                <div key={trip.id} className={`bg-white rounded-[2rem] p-6 shadow-sm border relative hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group ${isRunning ? 'border-green-500 ring-2 ring-green-50' : 'border-gray-100'}`}>
-                  
-                  {isRunning && (
-                     <div className="absolute -top-3 -right-3 bg-green-500 text-white text-xs font-black px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce">
-                        <div className="w-2 h-2 bg-white rounded-full"></div> En Route
-                     </div>
-                  )}
-                  
-                  <div className="flex justify-between items-center border-b border-gray-50 pb-4 mb-4">
-                    <div className="flex items-center gap-2 text-yamo-teal font-bold bg-yamo-teal/10 px-3 py-1.5 rounded-xl text-sm">
-                      <Calendar size={16} />
-                      <span className="capitalize">{formatDate(trip.date_depart)}</span>
-                    </div>
-                    {trip.heure_depart && (
-                      <div className="flex items-center gap-1.5 text-yamo-orange font-black">
-                        <Clock size={16} />
-                        {trip.heure_depart.substring(0, 5)}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-4 mb-6 relative">
-                    <div className="flex flex-col items-center mt-1">
-                      <div className="w-3.5 h-3.5 rounded-full border-[3px] border-gray-300"></div>
-                      <div className="w-0.5 h-10 bg-gray-200 my-1"></div>
-                      <div className="w-3.5 h-3.5 rounded-full border-[3px] border-yamo-orange"></div>
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-bold text-gray-900 text-lg mb-4 line-clamp-1">{trip.depart.split(',')[0]}</p>
-                      <p className="font-bold text-gray-900 text-lg line-clamp-1">{trip.destination.split(',')[0]}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-yamo-teal font-black">
-                        {trip.conducteur_nom ? trip.conducteur_nom.charAt(0).toUpperCase() : 'C'}
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900 text-sm">{trip.conducteur_nom || "Conducteur"}</p>
-                        <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                          <Users size={12}/> {trip.places_disponibles} places
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col items-end">
-                      <p className="text-2xl font-black text-yamo-teal">{trip.prix} <span className="text-sm font-bold">FCFA</span></p>
-                      <Link href={`/recherche?depart=${lienDepart}&destination=${lienDest}&date=${lienDate}&passagers=1`}>
-                        <button className="mt-2 text-sm bg-gray-50 text-yamo-teal font-bold px-4 py-2 rounded-xl group-hover:bg-yamo-teal group-hover:text-white transition">
-                          Réserver
-                        </button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="bg-[#E8F4F8] rounded-[3rem] p-12 text-center border border-yamo-teal/10">
-            <Car size={64} className="mx-auto text-yamo-teal opacity-50 mb-4" />
-            <h3 className="text-2xl font-black text-gray-900 mb-2">Soyez le premier à publier !</h3>
-            <p className="text-gray-600 text-lg mb-6">Il n'y a pas encore de trajet programmé aujourd'hui.</p>
-            <Link href="/publier">
-              <button className="bg-yamo-teal text-white font-bold px-8 py-4 rounded-full shadow-lg hover:bg-[#115566] transition">
-                Proposer mon trajet
-              </button>
-            </Link>
-          </div>
-        )}
-      </section>
-
-      {/* --- CONFIANCE & CHOIX --- */}
-      <section className="py-24 bg-gray-50 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-16 mb-24">
-            <div className="flex flex-col items-start gap-6 group hover:-translate-y-1 transition-transform duration-300">
-              <div className="p-5 bg-white rounded-3xl shadow-sm group-hover:shadow-md transition-shadow"><ShieldCheck size={48} className="text-yamo-teal group-hover:scale-110 transition-transform" /></div>
-              <h3 className="text-2xl font-black text-gray-900">Zéro "On dit", que du vrai</h3>
-              <p className="text-gray-600 text-lg leading-relaxed font-medium">On check les profils, les avis et les CNI. Tu sais avec qui tu montes en voiture.</p>
-            </div>
-            <div className="flex flex-col items-start gap-6 group hover:-translate-y-1 transition-transform duration-300">
-              <div className="p-5 bg-white rounded-3xl shadow-sm group-hover:shadow-md transition-shadow"><SmartphoneNfc size={48} className="text-yamo-teal group-hover:scale-110 transition-transform" /></div>
-              <h3 className="text-2xl font-black text-gray-900">Payez par Mobile Money</h3>
-              <p className="text-gray-600 text-lg leading-relaxed font-medium">Wave, Orange Money ou MTN... Réglez sans palabres avant même d'arriver.</p>
-            </div>
-            <div className="flex flex-col items-start gap-6 group hover:-translate-y-1 transition-transform duration-300">
-              <div className="p-5 bg-white rounded-3xl shadow-sm group-hover:shadow-md transition-shadow"><PiggyBank size={48} className="text-yamo-teal group-hover:scale-110 transition-transform" /></div>
-              <h3 className="text-2xl font-black text-gray-900">Économisez gros</h3>
-              <p className="text-gray-600 text-lg leading-relaxed font-medium">Partagez l'essence avec les autres. C'est cadeau pour ton portefeuille !</p>
-            </div>
-          </div>
-
-          <h2 className="text-4xl font-black text-gray-900 mb-16 text-center">Choisis ton wé, on gère le reste !</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer group">
-              <div className="bg-[#E8F4F8] p-6 rounded-[2rem] text-yamo-teal group-hover:bg-yamo-teal group-hover:text-white transition-all"><Car size={40}/></div>
-              <div className="flex-1">
-                <h4 className="text-2xl font-black">Trajet Express</h4>
-                <p className="text-gray-500 font-medium italic text-lg">Un gombo urgent ou une course ? On part ensemble, c'est moins cher !</p>
-              </div>
-              <ArrowRight className="text-gray-300 group-hover:text-yamo-teal group-hover:translate-x-2 transition-all" size={32} />
-            </div>
-            
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm flex items-center gap-8 border border-gray-100 hover:border-yamo-teal hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer group">
-              <div className="bg-[#FFF0E8] p-6 rounded-[2rem] text-yamo-orange group-hover:bg-yamo-orange group-hover:text-white transition-all"><Calendar size={40}/></div>
-              <div className="flex-1">
-                <h4 className="text-2xl font-black">Pass Boulot-Dodo</h4>
-                <p className="text-gray-500 font-medium italic text-lg">Fini les rangs à la gare ! Abonne-toi pour toute la semaine avec ton voisin.</p>
-              </div>
-              <ArrowRight className="text-gray-300 group-hover:text-yamo-orange group-hover:translate-x-2 transition-all" size={32} />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- FOOTER --- */}
-      <footer className="bg-gray-900 text-white pt-24 pb-12 px-6">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-16 mb-20">
-          <div className="col-span-1">
-            <img src="/Yamo_Logo.png" className="h-24 brightness-200 mb-8" alt="Logo White" />
-            <p className="text-gray-400 font-medium leading-relaxed text-lg">Le covoiturage n°1 au pays. Voyagez malin, voyagez ensemble.</p>
+      {/* --- FOOTER (Anonymisé) --- */}
+      <footer className="bg-[#0f172a] text-white pt-24 pb-12 px-6 lg:px-12 rounded-t-[5rem] relative z-0 mt-[-5rem]">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 border-b border-white/10 pb-16 mb-12 pt-16">
+          <div className="col-span-1 md:col-span-2">
+            <img src="/Yamo_Logo.png" className="h-12 brightness-200 mb-6" alt="Yamoh White" />
+            <p className="text-gray-400 font-medium leading-relaxed max-w-sm">Yamoh est le premier réseau communautaire de partage de frais de route en Côte d'Ivoire. L'humain au centre du voyage.</p>
           </div>
           <div>
-            <h5 className="font-black text-xl mb-8 tracking-tight">Yamoh</h5>
-            <ul className="space-y-5 text-gray-400 font-bold text-lg">
-              <li><Link href="#" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">Qui sommes-nous ?</Link></li>
-              <li><Link href="/publier" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">Proposer un trajet</Link></li>
+            <h5 className="font-black text-lg mb-6">Légal</h5>
+            <ul className="space-y-4 text-gray-400 font-medium text-sm">
+              <li><Link href="/communaute" className="hover:text-white transition">Charte de la communauté</Link></li>
+              <li><Link href="/securite" className="hover:text-white transition">Sécurité</Link></li>
+              <li><Link href="#" className="hover:text-white transition">CGV & Confidentialité</Link></li>
             </ul>
           </div>
           <div>
-            <h5 className="font-black text-xl mb-8 tracking-tight">Légal</h5>
-            <ul className="space-y-5 text-gray-400 font-bold text-lg">
-              <li><Link href="#" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">CGV</Link></li>
-              <li><Link href="#" className="hover:text-yamo-orange hover:translate-x-1 inline-block transition-transform">Confidentialité</Link></li>
+            <h5 className="font-black text-lg mb-6">Contact</h5>
+            <ul className="space-y-4 text-gray-400 font-medium text-sm">
+              <li>support@yamoh.net</li>
+              <li>Abidjan, Côte d'Ivoire</li>
             </ul>
           </div>
-          <div>
-            <h5 className="font-black text-xl mb-8 tracking-tight">Suivez-nous</h5>
-            <div className="flex gap-5">
-              <div className="bg-white/10 p-4 rounded-full hover:bg-yamo-orange hover:scale-110 transition-all cursor-pointer shadow-lg"><Share2 size={24}/></div>
-            </div>
-          </div>
         </div>
-        <div className="max-w-7xl mx-auto pt-10 border-t border-white/10 text-center text-gray-500 font-bold">
-          © 2026 Yamoh Côte d'Ivoire. Tous droits réservés.
-        </div>
+        <div className="text-center text-gray-600 font-bold text-sm">© {new Date().getFullYear()} Yamoh Côte d'Ivoire. Tous droits réservés.</div>
       </footer>
     </main>
   );
