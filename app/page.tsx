@@ -233,10 +233,13 @@ export default function LandingPage() {
         <h2 className="text-4xl lg:text-6xl font-black text-[#0f172a] mb-8 tracking-tighter">Prêt à rejoindre la famille ?</h2>
         <p className="text-lg lg:text-xl text-gray-500 mb-12 font-medium max-w-xl mx-auto">Créez votre profil en 2 minutes et découvrez les trajets solidaires et les ambiances de Babi autour de vous.</p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-12">
-          <button className="flex items-center justify-center gap-4 bg-black text-white px-8 py-4 rounded-2xl hover:scale-105 hover:shadow-2xl transition w-full sm:w-auto group">
+          
+          {/* LIEN APP STORE INTÉGRÉ ICI */}
+          <a href="https://apps.apple.com/app/yamoh/id6769196157" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-4 bg-black text-white px-8 py-4 rounded-2xl hover:scale-105 hover:shadow-2xl transition w-full sm:w-auto group">
             <Smartphone size={28}/>
             <div className="text-left leading-none"><p className="text-[10px] uppercase font-bold text-gray-400">Télécharger sur</p><p className="text-xl font-black mt-1">App Store</p></div>
-          </button>
+          </a>
+          
           <button className="flex items-center justify-center gap-4 bg-black text-white px-8 py-4 rounded-2xl hover:scale-105 hover:shadow-2xl transition w-full sm:w-auto group">
             <Smartphone size={28}/>
             <div className="text-left leading-none"><p className="text-[10px] uppercase font-bold text-gray-400">Disponible sur</p><p className="text-xl font-black mt-1">Google Play</p></div>
