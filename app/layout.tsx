@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Lexend } from "next/font/google"; // 1. On importe la police de BlaBlaCar
 import "./globals.css";
-import KycGuard from "@/components/KycGuard"; // NOUVEAU : On importe notre Videur
 
 // 2. On configure la police Lexend
 const lexend = Lexend({
@@ -26,9 +25,6 @@ export default function RootLayout({
     >
       {/* 5. On applique la police à tout le corps (body) du site */}
       <body className={`${lexend.className} min-h-full flex flex-col bg-white`}>
-        
-        <KycGuard /> {/* LE VIDEUR EST EN PLACE : Il surveille silencieusement */}
-        
         {children}
       </body>
     </html>
