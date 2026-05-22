@@ -41,7 +41,6 @@ export default function ERPAdmin() {
   const [chauffeurs, setChauffeurs] = useState<any[]>([]);
   const [loadingCompta, setLoadingCompta] = useState(true);
 
-  // NOUVEAU : Remplacement des recharges en attente par l'historique complet
   const [transactionsHistory, setTransactionsHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
@@ -89,32 +88,47 @@ export default function ERPAdmin() {
     }
   }, [activeMenu, isAuthorized]);
 
-  // --- NOUVEAU : FONCTION D'EXPORTATION CSV ---
+  // --- NOUVEAU : ÉCOUTE EN TEMPS RÉEL DES ALERTES SOS ---
+  useEffect(() => {
+    if (!isAuthorized) return;
+
+    // Abonnement au canal Realtime de Supabase pour la table 'alertes'
+    const alertesSubscription = supabase
+      .channel('public:alertes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alertes' }, (payload) => {
+        // Ajoute la nouvelle alerte directement en haut de la liste sans rafraîchir
+        setAlertes((currentAlertes) => [payload.new, ...currentAlertes]);
+        
+        // Alerte visuelle pour le support client
+        alert(`🚨 NOUVELLE ALERTE SOS REÇUE !\nPassager : ${payload.new.passager}\nMessage : ${payload.new.message}`);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(alertesSubscription);
+    };
+  }, [isAuthorized]);
+
   const exportToCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) {
       alert("Aucune donnée à exporter.");
       return;
     }
     
-    // Extraction des en-têtes
     const headers = Object.keys(data[0]);
     const csvRows = [];
     
-    // Ajout de la ligne d'en-tête
     csvRows.push(headers.join(','));
     
-    // Ajout des données
     for (const row of data) {
       const values = headers.map(header => {
         const val = row[header];
-        // Échapper les guillemets et gérer les objets imbriqués
         const escaped = ('' + (typeof val === 'object' ? JSON.stringify(val) : val)).replace(/"/g, '""');
         return `"${escaped}"`;
       });
       csvRows.push(values.join(','));
     }
     
-    // Téléchargement
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -124,10 +138,18 @@ export default function ERPAdmin() {
     window.URL.revokeObjectURL(url);
   };
 
+  // --- CORRECTION : FETCH RÉEL DES ALERTES DEPUIS SUPABASE ---
   const fetchAlertes = async () => {
-    setAlertes([
-      { id: 1, type: 'SOS_PASSAGER', message: "Conduite dangereuse !", trajet: "Abidjan -> Yamoussoukro", passager: "Aicha K.", chauffeur: "Ibrahim", date: new Date().toISOString(), lat: 5.3096, lng: -4.0126 }
-    ]);
+    const { data, error } = await supabase
+      .from('alertes')
+      .select('*')
+      .order('created_at', { ascending: false }); // Les plus récentes en premier
+
+    if (error) {
+      setDbError(`Erreur chargement des alertes : ${error.message}`);
+    } else if (data) {
+      setAlertes(data);
+    }
   };
 
   const fetchPendingKYC = async () => {
@@ -210,8 +232,8 @@ export default function ERPAdmin() {
   };
 
   const openGPS = (lat?: number, lng?: number) => {
-    if (lat && lng) window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
-    else window.open(`https://www.google.com/maps`, '_blank');
+    if (lat && lng) window.open(`http://maps.google.com/?q=${lat},${lng}`, '_blank');
+    else alert("Coordonnées GPS introuvables pour cette alerte.");
   };
 
   const fetchCompta = async () => {
@@ -251,13 +273,11 @@ export default function ERPAdmin() {
 
     const nouveauSolde = (chauffeur.solde_wallet || 0) + montant;
     
-    // 1. Mise à jour du solde
     const { error } = await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', chauffeur.id);
     
     if (error) {
       alert("Erreur lors de la recharge : " + error.message);
     } else {
-      // 2. Traçabilité dans la table paiements
       await supabase.from('paiements').insert([{
         user_id: chauffeur.id,
         montant: montant,
@@ -275,16 +295,14 @@ export default function ERPAdmin() {
     }
   };
 
-  // --- CORRECTION : FETCH DE L'HISTORIQUE AVEC JOINTURE MANUELLE ---
   const fetchTransactionsHistory = async () => {
     setLoadingHistory(true);
     
-    // 1. On récupère les paiements SANS la jointure Supabase qui cause l'erreur
     const { data: historyData, error: payError } = await supabase
       .from('paiements')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(100); // Les 100 dernières pour les performances
+      .limit(100); 
       
     if (payError) {
       setDbError(`Erreur Historique : ${payError.message}`);
@@ -293,17 +311,15 @@ export default function ERPAdmin() {
     }
 
     if (historyData && historyData.length > 0) {
-      // 2. On récupère les profils séparément
       const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, full_name, phone');
 
-      // 3. On fusionne les deux (Jointure manuelle)
       const combined = historyData.map(transaction => {
         const profile = profilesData?.find(p => p.id === transaction.user_id);
         return {
           ...transaction,
-          profiles: profile || {} // On attache le profil trouvé
+          profiles: profile || {}
         };
       });
 
@@ -391,7 +407,6 @@ export default function ERPAdmin() {
         
         <div className="my-4 border-t border-gray-800"></div>
 
-        {/* NOUVEAU MENU HISTORIQUE AU LIEU DE RECHARGES EN ATTENTE */}
         <MenuBtn icon={<History size={20}/>} label="Transactions API" active={activeMenu === "history"} onClick={() => {setActiveMenu("history"); setIsMobileMenuOpen(false);}} />
         
         <MenuBtn icon={<ShieldCheck size={20}/>} label="Vérifications (KYC)" badge={pendingUsers.length > 0 ? pendingUsers.length : undefined} active={activeMenu === "kyc"} onClick={() => {setActiveMenu("kyc"); setIsMobileMenuOpen(false);}} />
@@ -502,26 +517,33 @@ export default function ERPAdmin() {
 
           {activeMenu === "alertes" && (
              <div className="grid grid-cols-1 gap-4 animate-in fade-in duration-300">
-               {alertes.map(alerte => (
-                 <div key={alerte.id} className="bg-red-50 p-5 md:p-6 rounded-[2rem] border border-red-200 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                   <div className="flex gap-4">
-                     <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex flex-col items-center justify-center animate-pulse flex-shrink-0"><AlertOctagon size={28} /></div>
-                     <div>
-                       <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Urgence SOS</span>
-                       <h4 className="font-black text-xl text-red-900 mt-1">{alerte.message}</h4>
-                       <p className="text-sm font-bold text-red-700/70 mt-1">Passager : {alerte.passager} • Chauffeur : {alerte.chauffeur}</p>
-                       <p className="text-xs font-bold text-red-700/50 mt-0.5">{alerte.trajet}</p>
-                     </div>
-                   </div>
-                   <button onClick={() => openGPS(alerte.lat, alerte.lng)} className="w-full md:w-auto bg-red-600 text-white hover:bg-red-700 font-black py-4 md:py-3 px-6 rounded-xl transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2">
-                     <Crosshair size={18} /> Position exacte
-                   </button>
+               {alertes.length === 0 ? (
+                 <div className="text-center py-10">
+                    <AlertOctagon size={48} className="mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500 font-bold">Aucune alerte reçue pour le moment.</p>
                  </div>
-               ))}
+               ) : (
+                 alertes.map(alerte => (
+                   <div key={alerte.id} className="bg-red-50 p-5 md:p-6 rounded-[2rem] border border-red-200 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                     <div className="flex gap-4">
+                       <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex flex-col items-center justify-center animate-pulse flex-shrink-0"><AlertOctagon size={28} /></div>
+                       <div>
+                         <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Urgence SOS</span>
+                         <h4 className="font-black text-xl text-red-900 mt-1">{alerte.message}</h4>
+                         <p className="text-sm font-bold text-red-700/70 mt-1">Passager : {alerte.passager} • Chauffeur : {alerte.chauffeur}</p>
+                         <p className="text-xs font-bold text-red-700/50 mt-0.5">{alerte.trajet}</p>
+                         <p className="text-xs text-red-400 mt-1">{new Date(alerte.created_at || Date.now()).toLocaleString()}</p>
+                       </div>
+                     </div>
+                     <button onClick={() => openGPS(alerte.lat, alerte.lng)} className="w-full md:w-auto bg-red-600 text-white hover:bg-red-700 font-black py-4 md:py-3 px-6 rounded-xl transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2">
+                       <Crosshair size={18} /> Position exacte
+                     </button>
+                   </div>
+                 ))
+               )}
              </div>
           )}
 
-          {/* --- NOUVEL ÉCRAN : HISTORIQUE DES TRANSACTIONS --- */}
           {activeMenu === "history" && (
              loadingHistory ? <div className="flex justify-center py-20 text-yamo-teal"><Loader2 size={40} className="animate-spin" /></div> :
              <div className="space-y-6">
