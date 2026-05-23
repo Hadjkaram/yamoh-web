@@ -7,7 +7,7 @@ import {
   LayoutDashboard, ShieldCheck, Users, Map, Wallet, Search, 
   CheckCircle, XCircle, Eye, AlertTriangle, LogOut, Loader2,
   Clock, CheckCircle2, Ban, Lock, User as UserIcon,
-  Activity, TrendingUp, MapPin, Navigation, Car, PlusCircle, Trash2,
+  Activity, TrendingUp, MapPin, Navigation, Car, PlusCircle, MinusCircle, Trash2,
   Menu, X, Receipt, Phone, AlertOctagon, Crosshair, History, Download, BarChart3
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -88,18 +88,13 @@ export default function ERPAdmin() {
     }
   }, [activeMenu, isAuthorized]);
 
-  // --- NOUVEAU : ÉCOUTE EN TEMPS RÉEL DES ALERTES SOS ---
   useEffect(() => {
     if (!isAuthorized) return;
 
-    // Abonnement au canal Realtime de Supabase pour la table 'alertes'
     const alertesSubscription = supabase
       .channel('public:alertes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alertes' }, (payload) => {
-        // Ajoute la nouvelle alerte directement en haut de la liste sans rafraîchir
         setAlertes((currentAlertes) => [payload.new, ...currentAlertes]);
-        
-        // Alerte visuelle pour le support client
         alert(`🚨 NOUVELLE ALERTE SOS REÇUE !\nPassager : ${payload.new.passager}\nMessage : ${payload.new.message}`);
       })
       .subscribe();
@@ -138,17 +133,29 @@ export default function ERPAdmin() {
     window.URL.revokeObjectURL(url);
   };
 
-  // --- CORRECTION : FETCH RÉEL DES ALERTES DEPUIS SUPABASE ---
   const fetchAlertes = async () => {
     const { data, error } = await supabase
       .from('alertes')
       .select('*')
-      .order('created_at', { ascending: false }); // Les plus récentes en premier
+      .order('created_at', { ascending: false });
 
     if (error) {
       setDbError(`Erreur chargement des alertes : ${error.message}`);
     } else if (data) {
       setAlertes(data);
+    }
+  };
+
+  // --- NOUVEAU : FONCTION POUR RÉSOUDRE/SUPPRIMER L'ALERTE SOS ---
+  const handleResolveAlerte = async (alerteId: string) => {
+    const confirm = window.confirm("Avez-vous résolu cette urgence ? Elle sera supprimée du système.");
+    if (!confirm) return;
+
+    const { error } = await supabase.from('alertes').delete().eq('id', alerteId);
+    if (error) {
+      alert("Erreur lors de la suppression : " + error.message);
+    } else {
+      setAlertes(prev => prev.filter(a => a.id !== alerteId));
     }
   };
 
@@ -251,6 +258,7 @@ export default function ERPAdmin() {
     }
     const commissionYamoh = volumeGlobal * 0.10;
     
+    // Récupération de TOUS les chauffeurs (y compris ceux ayant rechargé par API)
     const { data: drivers, error: driversError } = await supabase.from('profiles').select('*').eq('role', 'chauffeur');
     if (driversError) setDbError(`Erreur Compta Chauffeurs: ${driversError.message}`);
 
@@ -291,6 +299,38 @@ export default function ERPAdmin() {
         user_id: chauffeur.id, titre: "Recharge Espèces 💰", message: `Votre portefeuille Yamoh a été crédité manuellement de ${montant} FCFA. Nouveau solde : ${nouveauSolde} FCFA.`, type: 'systeme'
       }]);
       alert(`Recharge de ${montant} FCFA effectuée et tracée avec succès !`);
+      fetchCompta(); 
+    }
+  };
+
+  // --- NOUVEAU : FONCTION DE RETRAIT MANUEL D'ESPÈCES ---
+  const handleRetirerWallet = async (chauffeur: any) => {
+    const montantStr = window.prompt(`Entrez le montant en ESPÈCES retiré par ${chauffeur.full_name} (en FCFA) :`);
+    if (!montantStr) return;
+    const montant = parseInt(montantStr, 10);
+    if (isNaN(montant) || montant <= 0) { alert("Montant invalide."); return; }
+    if (montant > (chauffeur.solde_wallet || 0)) { alert("Solde insuffisant pour ce retrait."); return; }
+
+    const nouveauSolde = (chauffeur.solde_wallet || 0) - montant;
+    
+    const { error } = await supabase.from('profiles').update({ solde_wallet: nouveauSolde }).eq('id', chauffeur.id);
+    
+    if (error) {
+      alert("Erreur lors du retrait : " + error.message);
+    } else {
+      await supabase.from('paiements').insert([{
+        user_id: chauffeur.id,
+        montant: montant,
+        type: 'retrait',
+        methode: 'Espèces / Manuel',
+        libelle: 'Retrait en agence',
+        status: 'completed'
+      }]);
+
+      await supabase.from('notifications').insert([{
+        user_id: chauffeur.id, titre: "Retrait Espèces 💸", message: `Un retrait manuel de ${montant} FCFA a été effectué sur votre compte. Nouveau solde : ${nouveauSolde} FCFA.`, type: 'systeme'
+      }]);
+      alert(`Retrait de ${montant} FCFA effectué et tracé avec succès !`);
       fetchCompta(); 
     }
   };
@@ -389,7 +429,7 @@ export default function ERPAdmin() {
     history: { title: "Historique Transactions", desc: "Suivi automatisé GeniusPay et dépôts en espèces." },
     kyc: { title: "Vérifications KYC", desc: "Validez les permis et cartes d'identité." },
     users: { title: "Base Utilisateurs", desc: "Gérez tous les membres inscrits sur Yamoh." },
-    compta: { title: "Comptabilité & Secours", desc: "Recharges en espèces manuelles." },
+    compta: { title: "Opérations Financières", desc: "Dépôts et retraits en espèces." },
     dashboard: { title: "Statistiques & Graphiques", desc: "Performances globales de l'application." }
   };
 
@@ -411,7 +451,7 @@ export default function ERPAdmin() {
         
         <MenuBtn icon={<ShieldCheck size={20}/>} label="Vérifications (KYC)" badge={pendingUsers.length > 0 ? pendingUsers.length : undefined} active={activeMenu === "kyc"} onClick={() => {setActiveMenu("kyc"); setIsMobileMenuOpen(false);}} />
         <MenuBtn icon={<Users size={20}/>} label="Utilisateurs" active={activeMenu === "users"} onClick={() => {setActiveMenu("users"); setIsMobileMenuOpen(false);}} />
-        <MenuBtn icon={<Wallet size={20}/>} label="Dépôts Espèces" active={activeMenu === "compta"} onClick={() => {setActiveMenu("compta"); setIsMobileMenuOpen(false);}} />
+        <MenuBtn icon={<Wallet size={20}/>} label="Finances / Espèces" active={activeMenu === "compta"} onClick={() => {setActiveMenu("compta"); setIsMobileMenuOpen(false);}} />
         <MenuBtn icon={<BarChart3 size={20}/>} label="Statistiques" active={activeMenu === "dashboard"} onClick={() => {setActiveMenu("dashboard"); setIsMobileMenuOpen(false);}} />
       </nav>
       <div className="p-4 border-t border-gray-800">
@@ -535,9 +575,14 @@ export default function ERPAdmin() {
                          <p className="text-xs text-red-400 mt-1">{new Date(alerte.created_at || Date.now()).toLocaleString()}</p>
                        </div>
                      </div>
-                     <button onClick={() => openGPS(alerte.lat, alerte.lng)} className="w-full md:w-auto bg-red-600 text-white hover:bg-red-700 font-black py-4 md:py-3 px-6 rounded-xl transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2">
-                       <Crosshair size={18} /> Position exacte
-                     </button>
+                     <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto mt-4 md:mt-0">
+                       <button onClick={() => openGPS(alerte.lat, alerte.lng)} className="w-full md:w-auto bg-gray-900 text-white hover:bg-black font-black py-4 md:py-3 px-6 rounded-xl transition shadow-lg flex items-center justify-center gap-2">
+                         <Crosshair size={18} /> GPS
+                       </button>
+                       <button onClick={() => handleResolveAlerte(alerte.id)} className="w-full md:w-auto bg-red-600 text-white hover:bg-red-700 font-black py-4 md:py-3 px-6 rounded-xl transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2">
+                         <CheckCircle2 size={18} /> Résolu
+                       </button>
+                     </div>
                    </div>
                  ))
                )}
@@ -569,7 +614,7 @@ export default function ERPAdmin() {
                             <p className="font-bold text-sm text-gray-900">{t.profiles?.full_name || 'Inconnu'}</p>
                             <p className="text-xs text-gray-500">{t.profiles?.phone}</p>
                           </td>
-                          <td className="p-4 md:p-6"><span className={`font-black text-sm ${t.type === 'gain' ? 'text-green-600' : 'text-orange-500'}`}>{t.type === 'gain' ? '+' : ''}{t.montant} F</span></td>
+                          <td className="p-4 md:p-6"><span className={`font-black text-sm ${t.type === 'gain' ? 'text-green-600' : 'text-orange-500'}`}>{t.type === 'gain' ? '+' : '-'}{t.montant} F</span></td>
                           <td className="p-4 md:p-6"><span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-xs font-black uppercase">{t.methode || 'N/A'}</span></td>
                           <td className="p-4 md:p-6">
                             <span className={`px-2 py-1 text-[10px] font-black uppercase rounded-lg ${t.status === 'completed' || t.type === 'gain' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
@@ -630,15 +675,15 @@ export default function ERPAdmin() {
              <div className="space-y-6 md:space-y-8 animate-in fade-in duration-300">
                
                <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
-                 <div className="p-4 md:p-6 border-b border-gray-100 flex items-center gap-4 bg-orange-50/50">
-                   <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><AlertTriangle size={24}/></div>
+                 <div className="p-4 md:p-6 border-b border-gray-100 flex items-center gap-4 bg-gray-50/50">
+                   <div className="p-3 bg-gray-200 text-gray-700 rounded-xl"><Wallet size={24}/></div>
                    <div>
-                     <h3 className="text-lg md:text-xl font-black text-gray-900">Recharge d'urgence / Espèces</h3>
-                     <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez manuellement le portefeuille d'un chauffeur en cas de panne API.</p>
+                     <h3 className="text-lg md:text-xl font-black text-gray-900">Opérations Financières Manuelles</h3>
+                     <p className="text-gray-600 text-xs md:text-sm mt-1">Créditez ou débitez le portefeuille d'un chauffeur (dépôt ou retrait physique en agence).</p>
                    </div>
                  </div>
-                 <table className="w-full text-left border-collapse min-w-[500px]">
-                   <thead><tr className="bg-gray-50 border-b border-gray-100 text-[10px] md:text-xs uppercase tracking-wider text-gray-500 font-black"><th className="p-4 md:p-6">Chauffeur</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Solde Wallet</th><th className="p-4 md:p-6 text-right">Action d'Urgence</th></tr></thead>
+                 <table className="w-full text-left border-collapse min-w-[600px]">
+                   <thead><tr className="bg-gray-50 border-b border-gray-100 text-[10px] md:text-xs uppercase tracking-wider text-gray-500 font-black"><th className="p-4 md:p-6">Chauffeur</th><th className="p-4 md:p-6">Contact</th><th className="p-4 md:p-6">Solde Actuel</th><th className="p-4 md:p-6 text-right">Actions (Dépôt / Retrait)</th></tr></thead>
                    <tbody className="divide-y divide-gray-50">
                      {filteredChauffeurs.map(c => (
                        <tr key={c.id} className="hover:bg-gray-50/50 transition">
@@ -647,10 +692,13 @@ export default function ERPAdmin() {
                            <p className="font-bold text-sm md:text-base truncate max-w-[120px]">{c.full_name || 'Utilisateur'}</p>
                          </td>
                          <td className="p-4 md:p-6 font-medium text-xs md:text-sm text-gray-600">{c.phone || 'N/A'}</td>
-                         <td className="p-4 md:p-6"><span className={`font-black text-sm md:text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-red-500'}`}>{c.solde_wallet || 0} F</span></td>
-                         <td className="p-4 md:p-6 text-right">
-                           <button onClick={() => handleRechargerWallet(c)} className="bg-orange-100 text-orange-600 hover:bg-orange-500 hover:text-white font-bold px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 md:gap-2 ml-auto shadow-sm">
-                             <PlusCircle size={16}/> <span className="hidden sm:inline">Dépôt Espèces</span>
+                         <td className="p-4 md:p-6"><span className={`font-black text-sm md:text-lg ${c.solde_wallet > 0 ? 'text-green-600' : 'text-gray-500'}`}>{c.solde_wallet || 0} F</span></td>
+                         <td className="p-4 md:p-6 text-right flex justify-end gap-2">
+                           <button onClick={() => handleRetirerWallet(c)} className="bg-red-50 text-red-600 hover:bg-red-500 hover:text-white font-bold px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 md:gap-2 shadow-sm">
+                             <MinusCircle size={16}/> <span className="hidden sm:inline">Retrait</span>
+                           </button>
+                           <button onClick={() => handleRechargerWallet(c)} className="bg-green-50 text-green-600 hover:bg-green-500 hover:text-white font-bold px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 md:gap-2 shadow-sm">
+                             <PlusCircle size={16}/> <span className="hidden sm:inline">Dépôt</span>
                            </button>
                          </td>
                        </tr>
