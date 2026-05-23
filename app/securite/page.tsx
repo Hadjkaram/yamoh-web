@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ShieldCheck, LockKeyhole, UserCheck, ShieldAlert, ChevronLeft } from "lucide-react";
-import { GoogleFonts } from "google-fonts"; // Assure-toi d'avoir configuré Lexend dans ton layout
 
 export default function SecurityPage() {
   return (
