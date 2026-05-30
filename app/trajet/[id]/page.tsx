@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"; // NOUVEAU : Force Next.js à lire Supabase en temps réel sans utiliser le cache
+
 import { supabase } from "@/lib/supabase";
 import { Metadata } from "next";
 import { MapPin, Navigation, Calendar, Smartphone, Users } from "lucide-react";
@@ -18,7 +20,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: "Trajet introuvable | Yamoh" };
   }
 
-  // Formatage propre des villes
   const depart = trajet.depart?.split(',')[0] || "Départ";
   const dest = trajet.destination?.split(',')[0] || "Destination";
   const dateFormatee = new Date(trajet.date_depart).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' });
@@ -35,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       siteName: "Yamoh",
       images: [
         {
-          url: "https://www.yamoh.net/securite_verified.jpg", // Image d'aperçu par défaut (on utilise celle de ton site)
+          url: "https://www.yamoh.net/securite_verified.jpg", 
           width: 1200,
           height: 630,
           alt: "Covoiturage Yamoh",
@@ -47,8 +48,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// 2. L'INTERFACE WEB (Si l'utilisateur clique sur le lien depuis un navigateur)
+// 2. L'INTERFACE WEB 
 export default async function TrajetPage({ params }: Props) {
+  // On récupère le trajet ET on inclut le profil du conducteur (sécurisé)
   const { data: trajet } = await supabase
     .from('trajets')
     .select('*')
@@ -116,7 +118,7 @@ export default async function TrajetPage({ params }: Props) {
           <div className="flex items-center justify-between border-t border-gray-100 pt-6">
              <div className="flex items-center gap-3">
                <div className="w-12 h-12 bg-[#166C82]/10 text-[#166C82] rounded-full flex items-center justify-center font-black text-lg">
-                 {trajet.conducteur_nom.charAt(0)}
+                 {trajet.conducteur_nom?.charAt(0)}
                </div>
                <div>
                  <p className="text-xs font-bold text-gray-400 uppercase">Chauffeur</p>
