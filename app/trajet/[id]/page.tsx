@@ -1,19 +1,20 @@
-export const dynamic = "force-dynamic"; // NOUVEAU : Force Next.js à lire Supabase en temps réel sans utiliser le cache
+export const dynamic = "force-dynamic"; 
+export const revalidate = 0; // Force Vercel à vider son cache
 
 import { supabase } from "@/lib/supabase";
 import { Metadata } from "next";
 import { MapPin, Navigation, Calendar, Smartphone, Users } from "lucide-react";
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string };
 };
 
-// 1. GÉNÉRATION DE L'APERÇU POUR WHATSAPP ET FACEBOOK (Open Graph)
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const resolvedParams = await params;
   const { data: trajet } = await supabase
     .from('trajets')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', resolvedParams.id)
     .single();
 
   if (!trajet) {
@@ -24,45 +25,45 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const dest = trajet.destination?.split(',')[0] || "Destination";
   const dateFormatee = new Date(trajet.date_depart).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' });
 
-  const title = `🚗 ${depart} ➔ ${dest} avec ${trajet.conducteur_nom}`;
-  const description = `Départ le ${dateFormatee} à ${trajet.heure_depart?.substring(0,5)}. Il reste ${trajet.places_disponibles} place(s) à ${trajet.prix} FCFA. Réservez vite sur Yamoh !`;
-
   return {
-    title: title,
-    description: description,
-    openGraph: {
-      title: title,
-      description: description,
-      siteName: "Yamoh",
-      images: [
-        {
-          url: "https://www.yamoh.net/securite_verified.jpg", 
-          width: 1200,
-          height: 630,
-          alt: "Covoiturage Yamoh",
-        }
-      ],
-      locale: "fr_FR",
-      type: "website",
-    },
+    title: `🚗 ${depart} ➔ ${dest} avec ${trajet.conducteur_nom}`,
+    description: `Départ le ${dateFormatee} à ${trajet.heure_depart?.substring(0,5)}. Il reste ${trajet.places_disponibles} place(s) à ${trajet.prix} FCFA. Réservez vite sur Yamoh !`,
   };
 }
 
-// 2. L'INTERFACE WEB 
 export default async function TrajetPage({ params }: Props) {
-  // On récupère le trajet ET on inclut le profil du conducteur (sécurisé)
-  const { data: trajet } = await supabase
+  const resolvedParams = await params;
+
+  // On récupère le trajet ET on stocke l'erreur s'il y en a une
+  const { data: trajet, error } = await supabase
     .from('trajets')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', resolvedParams.id)
     .single();
 
-  if (!trajet) {
+  // Si on n'a pas de trajet OU qu'on a une erreur, on affiche la page d'erreur AVEC les détails
+  if (error || !trajet) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 text-center p-6">
-        <div>
+        <div className="w-full max-w-lg">
           <h1 className="text-2xl font-black text-gray-900 mb-2">Ce trajet n'est plus disponible.</h1>
           <p className="text-gray-500">Le chauffeur a peut-être annulé ou le trajet est complet.</p>
+          
+          {/* BOÎTE DE DÉBOGAGE (À retirer quand ça marchera) */}
+          <div className="mt-8 p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs text-left overflow-auto shadow-inner">
+            <p className="font-black text-sm mb-3 flex items-center gap-2">
+              <span>🛑</span> INFO TECHNIQUE CACHÉE :
+            </p>
+            <p className="mb-2"><strong>ID cherché :</strong> {resolvedParams.id}</p>
+            <p className="mb-2"><strong>Variables Vercel lues ? :</strong> {process.env.NEXT_PUBLIC_SUPABASE_URL ? "Oui ✅" : "Non ❌ (Vercel n'arrive pas à lire les clés)"}</p>
+            <div>
+              <strong>Erreur Supabase :</strong> 
+              <pre className="mt-1 p-2 bg-white rounded border border-red-100 text-[10px]">
+                {error ? JSON.stringify(error, null, 2) : "Aucune erreur, mais le trajet est introuvable."}
+              </pre>
+            </div>
+          </div>
+
         </div>
       </div>
     );
@@ -73,7 +74,6 @@ export default async function TrajetPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 font-sans">
       <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-xl border border-gray-100 overflow-hidden">
-        {/* Header coloré */}
         <div className="bg-[#166C82] p-8 text-white text-center">
           <img src="/Yamo_Logo.png" alt="Yamoh" className="h-10 mx-auto mb-6 brightness-200" />
           <p className="text-sm font-bold uppercase tracking-widest text-[#166C82] bg-white inline-block px-3 py-1 rounded-full mb-4">
@@ -82,7 +82,6 @@ export default async function TrajetPage({ params }: Props) {
           <h1 className="text-3xl font-black">{trajet.prix} FCFA <span className="text-sm font-normal opacity-80">/ place</span></h1>
         </div>
 
-        {/* Détails du trajet */}
         <div className="p-8 space-y-6">
           <div className="flex items-start gap-4">
             <div className="flex flex-col items-center mt-1">
@@ -118,7 +117,7 @@ export default async function TrajetPage({ params }: Props) {
           <div className="flex items-center justify-between border-t border-gray-100 pt-6">
              <div className="flex items-center gap-3">
                <div className="w-12 h-12 bg-[#166C82]/10 text-[#166C82] rounded-full flex items-center justify-center font-black text-lg">
-                 {trajet.conducteur_nom?.charAt(0)}
+                 {trajet.conducteur_nom?.charAt(0) || "C"}
                </div>
                <div>
                  <p className="text-xs font-bold text-gray-400 uppercase">Chauffeur</p>
@@ -132,7 +131,6 @@ export default async function TrajetPage({ params }: Props) {
           </div>
         </div>
 
-        {/* CTA Téléchargement */}
         <div className="p-8 bg-gray-900 text-center">
           <h3 className="text-white font-black text-xl mb-2">Réservez cette place</h3>
           <p className="text-gray-400 text-sm mb-6">Ouvrez ou téléchargez l'application Yamoh pour confirmer votre place instantanément.</p>
