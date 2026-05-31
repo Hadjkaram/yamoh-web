@@ -1,9 +1,10 @@
 export const dynamic = "force-dynamic"; 
-export const revalidate = 0; // Force Vercel à vider son cache
+export const revalidate = 0; 
 
 import { supabase } from "@/lib/supabase";
 import { Metadata } from "next";
 import { MapPin, Navigation, Calendar, Smartphone, Users } from "lucide-react";
+import { headers } from "next/headers"; 
 
 type Props = {
   params: Promise<{ id: string }> | { id: string };
@@ -28,48 +29,58 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `🚗 ${depart} ➔ ${dest} avec ${trajet.conducteur_nom}`,
     description: `Départ le ${dateFormatee} à ${trajet.heure_depart?.substring(0,5)}. Il reste ${trajet.places_disponibles} place(s) à ${trajet.prix} FCFA. Réservez vite sur Yamoh !`,
+    openGraph: {
+      title: `🚗 ${depart} ➔ ${dest} avec ${trajet.conducteur_nom}`,
+      description: `Départ le ${dateFormatee} à ${trajet.heure_depart?.substring(0,5)}. Il reste ${trajet.places_disponibles} place(s) à ${trajet.prix} FCFA. Réservez vite sur Yamoh !`,
+      siteName: "Yamoh",
+      images: [
+        {
+          url: "https://www.yamoh.net/securite_verified.jpg", 
+          width: 1200,
+          height: 630,
+          alt: "Covoiturage Yamoh",
+        }
+      ],
+      locale: "fr_FR",
+      type: "website",
+    },
   };
 }
 
 export default async function TrajetPage({ params }: Props) {
   const resolvedParams = await params;
 
-  // On récupère le trajet ET on stocke l'erreur s'il y en a une
-  const { data: trajet, error } = await supabase
+  const { data: trajet } = await supabase
     .from('trajets')
     .select('*')
     .eq('id', resolvedParams.id)
     .single();
 
-  // Si on n'a pas de trajet OU qu'on a une erreur, on affiche la page d'erreur AVEC les détails
-  if (error || !trajet) {
+  if (!trajet) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 text-center p-6">
         <div className="w-full max-w-lg">
           <h1 className="text-2xl font-black text-gray-900 mb-2">Ce trajet n'est plus disponible.</h1>
           <p className="text-gray-500">Le chauffeur a peut-être annulé ou le trajet est complet.</p>
-          
-          {/* BOÎTE DE DÉBOGAGE (À retirer quand ça marchera) */}
-          <div className="mt-8 p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs text-left overflow-auto shadow-inner">
-            <p className="font-black text-sm mb-3 flex items-center gap-2">
-              <span>🛑</span> INFO TECHNIQUE CACHÉE :
-            </p>
-            <p className="mb-2"><strong>ID cherché :</strong> {resolvedParams.id}</p>
-            <p className="mb-2"><strong>Variables Vercel lues ? :</strong> {process.env.NEXT_PUBLIC_SUPABASE_URL ? "Oui ✅" : "Non ❌ (Vercel n'arrive pas à lire les clés)"}</p>
-            <div>
-              <strong>Erreur Supabase :</strong> 
-              <pre className="mt-1 p-2 bg-white rounded border border-red-100 text-[10px]">
-                {error ? JSON.stringify(error, null, 2) : "Aucune erreur, mais le trajet est introuvable."}
-              </pre>
-            </div>
-          </div>
-
         </div>
       </div>
     );
   }
 
   const dateFormatee = new Date(trajet.date_depart).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // =========================================================================
+  // DÉTECTION DU TÉLÉPHONE (IOS ou ANDROID) ET LIENS DYNAMIQUES
+  // =========================================================================
+  const headersList = await headers();
+  const userAgent = headersList.get("user-agent") || "";
+  const isIOS = /iPad|iPhone|iPod/i.test(userAgent);
+
+  // Le lien s'adapte automatiquement au téléphone !
+  const storeLink = isIOS 
+    ? "https://apps.apple.com/app/id6769196157" // <-- Ton vrai ID Apple est bien là !
+    : "https://play.google.com/store/apps/details?id=net.yamoh.app";
+  // =========================================================================
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 font-sans">
@@ -134,9 +145,11 @@ export default async function TrajetPage({ params }: Props) {
         <div className="p-8 bg-gray-900 text-center">
           <h3 className="text-white font-black text-xl mb-2">Réservez cette place</h3>
           <p className="text-gray-400 text-sm mb-6">Ouvrez ou téléchargez l'application Yamoh pour confirmer votre place instantanément.</p>
-          <a href="https://play.google.com/store/apps/details?id=net.yamoh.app" className="flex items-center justify-center gap-2 bg-white text-gray-900 w-full py-4 rounded-xl font-black hover:bg-gray-100 transition">
+          
+          <a href={storeLink} className="flex items-center justify-center gap-2 bg-white text-gray-900 w-full py-4 rounded-xl font-black hover:bg-gray-100 transition">
             <Smartphone size={20}/> Ouvrir dans l'Application
           </a>
+
         </div>
       </div>
     </main>
